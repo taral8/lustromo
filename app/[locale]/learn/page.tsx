@@ -1,0 +1,73 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { BookOpen } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { useLocale } from "@/lib/locale-context"
+import { articles } from "@/lib/articles"
+
+const categories = ["All", "Lab-Grown Diamonds", "Gold Buying", "Certification", "Market Trends"]
+
+export default function LearnPage() {
+  const locale = useLocale()
+  const prefix = `/${locale}`
+  const [category, setCategory] = useState("All")
+
+  const filtered = category === "All" ? articles : articles.filter(a => a.category === category)
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: "#F0FDFA", color: "var(--accent-primary)" }}>
+          <BookOpen className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: "var(--text-primary)" }}>Learn</h1>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Expert guides for smarter jewellery buying.</p>
+        </div>
+      </div>
+
+      {/* Category filter */}
+      <div className="mt-6 flex flex-wrap gap-2">
+        {categories.map(cat => (
+          <button key={cat} onClick={() => setCategory(cat)}
+            className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            style={{
+              background: category === cat ? "var(--accent-primary)" : "#fff",
+              color: category === cat ? "#fff" : "var(--text-secondary)",
+              border: category === cat ? "none" : "1px solid var(--border)",
+            }}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Articles */}
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map(article => (
+          <Link key={article.slug} href={`${prefix}/learn/${article.slug}`}>
+            <Card className="group h-full cursor-pointer transition-shadow hover:shadow-md">
+              <CardContent className="p-0">
+                <div className="h-40 rounded-t-lg" style={{ background: "linear-gradient(135deg, #F1F5F9, #E2E8F0)" }} />
+                <div className="p-5">
+                  <div className="flex items-center gap-2">
+                    <Badge>{article.category}</Badge>
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>{article.readTime} read</span>
+                  </div>
+                  <h2 className="mt-3 font-semibold transition-colors group-hover:text-[var(--accent-primary)]" style={{ color: "var(--text-primary)" }}>
+                    {article.title}
+                  </h2>
+                  <p className="mt-2 text-sm line-clamp-2" style={{ color: "var(--text-secondary)" }}>
+                    {article.excerpt}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}

@@ -33,7 +33,7 @@ export function HeroSection({ locale }: HeroSectionProps) {
             <Button
               size="lg"
               variant="outline"
-              className="border-slate-500 px-6 py-3 font-semibold text-white hover:border-primary hover:bg-white/10 hover:text-white"
+              className="border-white/40 bg-white/10 px-6 py-3 font-semibold text-white hover:border-white/60 hover:bg-white/20 hover:text-white"
               asChild
             >
               <Link href={`${prefix}/gold-calculator`}>Calculate Gold Value</Link>

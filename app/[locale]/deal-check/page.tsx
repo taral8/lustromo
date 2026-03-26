@@ -39,17 +39,33 @@ function getVerdict(diffPercent: number): { label: string; color: string } {
   return { label: "Overpriced", color: "var(--accent-danger)" }
 }
 
+interface SimilarDiamond {
+  product_name: string
+  product_url: string
+  retailer_name: string
+  shape: string
+  carat: number
+  color: string | null
+  clarity: string | null
+  origin: string
+  cert_lab: string | null
+  price: number
+  metal: string | null
+}
+
 export default function DealCheckPage() {
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [product, setProduct] = useState<ScrapedProduct | null>(null)
+  const [similar, setSimilar] = useState<SimilarDiamond[]>([])
 
   async function handleCheck() {
     if (!url.trim()) return
     setLoading(true)
     setError(null)
     setProduct(null)
+    setSimilar([])
 
     try {
       const res = await fetch("/api/deal-check", {
@@ -62,6 +78,21 @@ export default function DealCheckPage() {
         setError(data.error || "Failed to fetch product")
       } else {
         setProduct(data)
+        // Fetch similar diamonds from our database
+        if (data.productType === "diamond" && data.specs?.carat) {
+          const params = new URLSearchParams({
+            shape: data.specs.shape?.toLowerCase() || "",
+            carat: data.specs.carat || "1",
+            origin: data.specs.origin === "lab_grown" ? "lab_grown" : "natural",
+            exclude_url: url.trim(),
+          })
+          if (data.specs.color) params.set("color", data.specs.color)
+          if (data.specs.clarity) params.set("clarity", data.specs.clarity)
+          fetch(`/api/diamonds/similar?${params}`)
+            .then(r => r.json())
+            .then(d => { if (d.similar?.length) setSimilar(d.similar) })
+            .catch(() => {})
+        }
       }
     } catch {
       setError("Network error — could not reach the server")
@@ -302,6 +333,51 @@ export default function DealCheckPage() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Similar Diamonds from our database */}
+      {similar.length > 0 && (
+        <Card className="mt-6">
+          <CardContent className="p-6">
+            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              Similar Diamonds From Other Retailers
+            </h3>
+            <div className="mt-4 space-y-3">
+              {similar.map((d, i) => (
+                <a
+                  key={i}
+                  href={d.product_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-[var(--background-alt)]"
+                  style={{ border: "1px solid var(--border)" }}
+                >
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                      {d.carat}ct {d.shape ? d.shape.charAt(0).toUpperCase() + d.shape.slice(1) : ""}{" "}
+                      {d.color || ""} {d.clarity || ""}
+                      {d.cert_lab && <span className="ml-1 text-xs" style={{ color: "var(--accent-secondary)" }}>({d.cert_lab})</span>}
+                    </p>
+                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                      {d.retailer_name} {d.metal && `· ${d.metal}`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono font-bold" style={{ color: "var(--text-primary)" }}>
+                      ${d.price.toLocaleString()}
+                    </p>
+                    <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                      ${Math.round(d.price / d.carat).toLocaleString()}/ct
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+              Prices from our database of Australian retailers. Updated daily.
+            </p>
           </CardContent>
         </Card>
       )}

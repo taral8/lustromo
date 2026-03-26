@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { TrendingUp, TrendingDown } from "lucide-react"
+import { useState, useEffect } from "react"
+import { TrendingUp, TrendingDown, Loader2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Sparkline } from "@/components/charts/sparkline"
@@ -12,20 +12,86 @@ import { shapeIcons, type DiamondShapeName } from "@/components/tools/diamond-sh
 const shapes: DiamondShape[] = ["round","cushion","oval","princess","emerald","pear","radiant","asscher","marquise","heart"]
 const caratSummaries = [0.5, 1.0, 2.0, 3.0]
 
+interface LiveDiamond {
+  id: string
+  product_name: string
+  product_url: string
+  retailer_name: string
+  shape: string
+  carat: number
+  color: string | null
+  clarity: string | null
+  origin: string
+  cert_lab: string | null
+  price: number
+  metal: string | null
+  image_url: string | null
+}
+
 export default function DiamondPricesPage() {
   const [origin, setOrigin] = useState<DiamondOrigin>("lab_grown")
   const [shape, setShape] = useState<DiamondShape>("round")
   const [timeframe, setTimeframe] = useState("1M")
+  const [liveDiamonds, setLiveDiamonds] = useState<LiveDiamond[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isLiveData, setIsLiveData] = useState(false)
 
-  const summaryData = getDiamondPrices(origin, shape)
-  const allData = getDiamondPrices(origin)
+  // Fetch live data from Supabase via API
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/diamonds?origin=${origin}&shape=${shape}&locale=au&limit=100&sort=price`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.diamonds?.length > 0) {
+          setLiveDiamonds(data.diamonds)
+          setIsLiveData(true)
+        } else {
+          setLiveDiamonds([])
+          setIsLiveData(false)
+        }
+        setLoading(false)
+      })
+      .catch(() => {
+        setLiveDiamonds([])
+        setIsLiveData(false)
+        setLoading(false)
+      })
+  }, [origin, shape])
+
+  // Compute summary stats from live data
+  const liveSummary = caratSummaries.map(carat => {
+    const nearby = liveDiamonds.filter(d => Math.abs(d.carat - carat) <= 0.3)
+    if (nearby.length === 0) return null
+    const prices = nearby.map(d => d.price).sort((a, b) => a - b)
+    const avg = prices.reduce((a, b) => a + b, 0) / prices.length
+    return {
+      carat,
+      avgPrice: Math.round(avg),
+      minPrice: prices[0],
+      maxPrice: prices[prices.length - 1],
+      count: nearby.length,
+    }
+  })
+
+  // Fallback to placeholder data
+  const placeholderData = getDiamondPrices(origin, shape)
+  const allPlaceholder = getDiamondPrices(origin)
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-      <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: "var(--text-primary)" }}>Diamond Prices</h1>
-      <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
-        Track lab-grown and natural diamond prices with daily updates from leading retailers.
-      </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold sm:text-3xl" style={{ color: "var(--text-primary)" }}>Diamond Prices</h1>
+          <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
+            Track lab-grown and natural diamond prices with daily updates from leading retailers.
+          </p>
+        </div>
+        {isLiveData && (
+          <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold text-white" style={{ background: "var(--accent-success)" }}>
+            LIVE DATA
+          </span>
+        )}
+      </div>
 
       {/* Origin toggle */}
       <div className="mt-6 flex gap-1 rounded-lg p-1" style={{ background: "var(--background-alt)", width: "fit-content" }}>
@@ -63,8 +129,11 @@ export default function DiamondPricesPage() {
 
       {/* Price Summary Cards */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {caratSummaries.map(carat => {
-          const data = summaryData.find(d => d.carat === carat)
+        {caratSummaries.map((carat, i) => {
+          const live = liveSummary[i]
+          const fallback = placeholderData.find(d => d.carat === carat)
+          const data = live || fallback
+
           if (!data) return (
             <Card key={carat} className="opacity-50">
               <CardContent className="p-4">
@@ -73,23 +142,30 @@ export default function DiamondPricesPage() {
               </CardContent>
             </Card>
           )
+
+          const avgPrice = live ? live.avgPrice : (fallback?.avgPrice ?? 0)
+          const count = live ? live.count : (fallback?.inventoryCount ?? 0)
+          const change = fallback?.change30d ?? 0
+
           return (
             <Card key={carat}>
               <CardContent className="p-4">
-                <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>{carat} Carat Diamond Prices</p>
+                <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>{carat} Carat {shapeLabels[shape]}</p>
                 <div className="mt-2 font-mono text-xl font-bold" style={{ color: "var(--text-primary)" }}>
-                  {formatPrice(data.avgPrice)}
+                  {formatPrice(avgPrice)}
                 </div>
                 <div className="mt-2 flex items-center justify-between">
-                  <Sparkline data={data.sparklineData} />
-                  <span className="flex items-center gap-0.5 font-mono text-xs font-semibold"
-                    style={{ color: data.change30d >= 0 ? "var(--accent-success)" : "var(--accent-danger)" }}>
-                    {data.change30d >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    {Math.abs(data.change30d)}%
-                  </span>
+                  {fallback && <Sparkline data={fallback.sparklineData} />}
+                  {change !== 0 && (
+                    <span className="flex items-center gap-0.5 font-mono text-xs font-semibold"
+                      style={{ color: change >= 0 ? "var(--accent-success)" : "var(--accent-danger)" }}>
+                      {change >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                      {Math.abs(change)}%
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  {(data.inventoryCount / 1000).toFixed(0)}K stones
+                  {count.toLocaleString()} stones
                 </p>
               </CardContent>
             </Card>
@@ -99,7 +175,9 @@ export default function DiamondPricesPage() {
 
       {/* Timeframe selector */}
       <div className="mt-8 flex items-center justify-between">
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Price Index</h2>
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+          {isLiveData ? "Live Inventory" : "Price Index"}
+        </h2>
         <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--background-alt)" }}>
           {["1M","3M","6M","1Y"].map(tf => (
             <button key={tf} onClick={() => setTimeframe(tf)}
@@ -115,63 +193,121 @@ export default function DiamondPricesPage() {
         </div>
       </div>
 
-      {/* Price Table */}
-      <Card className="mt-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Price Index</th>
-                <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Chart</th>
-                <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Price (AUD)</th>
-                <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>% Change</th>
-                <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Range</th>
-                <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Inventory</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allData.map(row => (
-                <tr key={`${row.shape}-${row.carat}`}
-                  className="transition-colors hover:bg-[var(--background-alt)]"
-                  style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-4 py-3">
-                    <span className="font-medium" style={{ color: "var(--text-primary)" }}>
-                      {row.carat}ct {shapeLabels[row.shape]}
-                    </span>
-                    <Badge variant="secondary" className="ml-2 text-[10px]">
-                      {row.origin === "lab_grown" ? "Lab" : "Natural"}
-                    </Badge>
-                    <Badge variant="outline" className="ml-1 text-[10px]" style={{ color: "var(--accent-warning)", borderColor: "var(--accent-warning)" }}>
-                      Sample Data
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3"><Sparkline data={row.sparklineData} /></td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {formatPrice(row.avgPrice)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="inline-flex items-center gap-0.5 font-mono font-semibold"
-                      style={{ color: row.change30d >= 0 ? "var(--accent-success)" : "var(--accent-danger)" }}>
-                      {row.change30d >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                      {Math.abs(row.change30d)}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
-                    {formatPrice(row.minPrice)} – {formatPrice(row.maxPrice)}
-                  </td>
-                  <td className="px-4 py-3 text-right" style={{ color: "var(--text-secondary)" }}>
-                    {(row.inventoryCount / 1000).toFixed(0)}K
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {/* Loading state */}
+      {loading && (
+        <Card className="mt-4">
+          <CardContent className="flex items-center justify-center gap-3 p-8">
+            <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--accent-primary)" }} />
+            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading diamond prices...</span>
+          </CardContent>
+        </Card>
+      )}
 
-      <p className="mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
-        [Sample Data] Prices sourced from leading local and international retailers. Updated daily.
-      </p>
+      {/* LIVE: Diamond inventory table */}
+      {!loading && isLiveData && liveDiamonds.length > 0 && (
+        <Card className="mt-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Diamond</th>
+                  <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Specs</th>
+                  <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Price (AUD)</th>
+                  <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>$/ct</th>
+                  <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Retailer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveDiamonds.map(d => (
+                  <tr key={d.id} className="transition-colors hover:bg-[var(--background-alt)]" style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-4 py-3">
+                      <a href={d.product_url} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline" style={{ color: "var(--accent-primary)" }}>
+                        {d.carat}ct {d.shape ? d.shape.charAt(0).toUpperCase() + d.shape.slice(1) : ""} {d.color || ""} {d.clarity || ""}
+                      </a>
+                      {d.cert_lab && (
+                        <span className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#EFF6FF", color: "var(--accent-secondary)" }}>
+                          {d.cert_lab}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {d.metal && <span>{d.metal} &middot; </span>}
+                      {d.origin === "lab_grown" ? "Lab" : "Natural"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {formatPrice(d.price)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {formatPrice(Math.round(d.price / d.carat))}
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {d.retailer_name}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* FALLBACK: Placeholder price index table */}
+      {!loading && !isLiveData && (
+        <>
+          <Card className="mt-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Price Index</th>
+                    <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Chart</th>
+                    <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Price (AUD)</th>
+                    <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>% Change</th>
+                    <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Range</th>
+                    <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Inventory</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPlaceholder.map(row => (
+                    <tr key={`${row.shape}-${row.carat}`}
+                      className="transition-colors hover:bg-[var(--background-alt)]"
+                      style={{ borderBottom: "1px solid var(--border)" }}>
+                      <td className="px-4 py-3">
+                        <span className="font-medium" style={{ color: "var(--text-primary)" }}>
+                          {row.carat}ct {shapeLabels[row.shape]}
+                        </span>
+                        <Badge variant="outline" className="ml-2 text-[10px]" style={{ color: "var(--accent-warning)", borderColor: "var(--accent-warning)" }}>
+                          Sample
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3"><Sparkline data={row.sparklineData} /></td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {formatPrice(row.avgPrice)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center gap-0.5 font-mono font-semibold"
+                          style={{ color: row.change30d >= 0 ? "var(--accent-success)" : "var(--accent-danger)" }}>
+                          {row.change30d >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                          {Math.abs(row.change30d)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                        {formatPrice(row.minPrice)} – {formatPrice(row.maxPrice)}
+                      </td>
+                      <td className="px-4 py-3 text-right" style={{ color: "var(--text-secondary)" }}>
+                        {(row.inventoryCount / 1000).toFixed(0)}K
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          <p className="mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
+            [Sample Data] Live pricing from Australian retailers coming soon.
+          </p>
+        </>
+      )}
     </div>
   )
 }

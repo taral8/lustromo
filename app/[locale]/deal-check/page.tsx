@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ShieldCheck, Loader2, AlertCircle, ExternalLink } from "lucide-react"
+import { ShieldCheck, Loader2, AlertCircle, ExternalLink, Diamond, Coins } from "lucide-react"
 import { estimateDiamondPrice, type DiamondOrigin } from "@/lib/diamond-data"
 
 interface ScrapedProduct {
@@ -14,20 +14,26 @@ interface ScrapedProduct {
   image: string | null
   retailer: string | null
   url: string
+  productType: "diamond" | "gold" | "unknown"
   specs: {
     carat: string | null
     shape: string | null
     color: string | null
     clarity: string | null
+    cut: string | null
     metal: string | null
+    origin: "natural" | "lab_grown" | "unknown"
+    certLab: string | null
+    karatGold: string | null
+    weightGrams: string | null
   }
 }
 
 function getVerdict(diffPercent: number): { label: string; color: string } {
-  if (diffPercent <= -5) return { label: "Great Deal", color: "var(--accent-success)" }
-  if (diffPercent <= 5) return { label: "Fair Price", color: "var(--accent-secondary)" }
-  if (diffPercent <= 20) return { label: "Overpriced", color: "var(--accent-warning)" }
-  return { label: "Significantly Overpriced", color: "var(--accent-danger)" }
+  if (diffPercent <= -10) return { label: "Great Deal", color: "var(--accent-success)" }
+  if (diffPercent <= 10) return { label: "Fair Price", color: "var(--accent-secondary)" }
+  if (diffPercent <= 25) return { label: "Above Average", color: "var(--accent-warning)" }
+  return { label: "Overpriced", color: "var(--accent-danger)" }
 }
 
 export default function DealCheckPage() {
@@ -36,13 +42,14 @@ export default function DealCheckPage() {
   const [error, setError] = useState<string | null>(null)
   const [product, setProduct] = useState<ScrapedProduct | null>(null)
 
-  // Manual entry fields
+  // Manual entry
+  const [manualOrigin, setManualOrigin] = useState<DiamondOrigin>("lab_grown")
   const [manualShape, setManualShape] = useState("round")
   const [manualCarat, setManualCarat] = useState("")
   const [manualColor, setManualColor] = useState("G")
   const [manualClarity, setManualClarity] = useState("VS2")
   const [manualPrice, setManualPrice] = useState("")
-  const [manualResult, setManualResult] = useState<{ asking: number; fair: number } | null>(null)
+  const [manualResult, setManualResult] = useState<{ asking: number; fair: number; origin: string } | null>(null)
 
   async function handleUrlCheck() {
     if (!url.trim()) return
@@ -74,24 +81,31 @@ export default function DealCheckPage() {
     const asking = parseFloat(manualPrice)
     const carat = parseFloat(manualCarat) || 1
     if (!asking || asking <= 0) return
-    const origin: DiamondOrigin = "lab_grown"
-    const result = estimateDiamondPrice(carat, manualColor, manualClarity, origin)
-    setManualResult({ asking, fair: result.fairPrice })
+    const result = estimateDiamondPrice(carat, manualColor, manualClarity, manualOrigin)
+    setManualResult({ asking, fair: result.fairPrice, origin: manualOrigin === "lab_grown" ? "Lab-Grown" : "Natural" })
     setProduct(null)
   }
 
-  // Calculate verdict for scraped product
+  // Compute verdict for scraped product
   let scrapedVerdict = null
-  if (product?.price && product.specs.carat) {
-    const carat = parseFloat(product.specs.carat) || 1
+  if (product?.price && product.productType === "diamond") {
+    const carat = parseFloat(product.specs.carat || "1")
     const color = product.specs.color || "G"
     const clarity = product.specs.clarity || "VS2"
-    const estimate = estimateDiamondPrice(carat, color, clarity, "lab_grown")
+    const origin: DiamondOrigin = product.specs.origin === "natural" ? "natural" : "lab_grown"
+    const estimate = estimateDiamondPrice(carat, color, clarity, origin)
     const diff = ((product.price - estimate.fairPrice) / estimate.fairPrice) * 100
-    scrapedVerdict = { asking: product.price, fair: estimate.fairPrice, diff, verdict: getVerdict(diff) }
+    scrapedVerdict = {
+      asking: product.price,
+      fair: estimate.fairPrice,
+      diff,
+      verdict: getVerdict(diff),
+      origin: origin === "natural" ? "Natural" : "Lab-Grown",
+      certLab: product.specs.certLab,
+    }
   }
 
-  // Calculate verdict for manual entry
+  // Compute verdict for manual
   let manualVerdict = null
   if (manualResult) {
     const diff = ((manualResult.asking - manualResult.fair) / manualResult.fair) * 100
@@ -110,11 +124,11 @@ export default function DealCheckPage() {
           Is This a Good Deal?
         </h1>
         <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
-          Paste any jeweller&apos;s product URL and we&apos;ll extract the price and give you a fair value verdict.
+          Paste any jeweller&apos;s product URL — we&apos;ll extract the details and give you a fair value verdict.
         </p>
       </div>
 
-      {/* URL Input */}
+      {/* URL Check */}
       <Card className="mt-8">
         <CardContent className="space-y-4 p-6">
           <div>
@@ -143,6 +157,24 @@ export default function DealCheckPage() {
             <div className="h-px flex-1" style={{ background: "var(--border)" }} />
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>or enter details manually</span>
             <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+          </div>
+
+          {/* Origin toggle */}
+          <div>
+            <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Diamond Type</label>
+            <div className="flex gap-2">
+              {(["lab_grown", "natural"] as DiamondOrigin[]).map(o => (
+                <button key={o} onClick={() => setManualOrigin(o)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                  style={{
+                    background: manualOrigin === o ? "var(--accent-primary)" : "var(--background-alt)",
+                    color: manualOrigin === o ? "#fff" : "var(--text-secondary)",
+                    border: manualOrigin === o ? "none" : "1px solid var(--border)",
+                  }}>
+                  {o === "lab_grown" ? "Lab-Grown" : "Natural"}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -193,7 +225,28 @@ export default function DealCheckPage() {
       {product && (
         <Card className="mt-6">
           <CardContent className="p-6">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>Product Found</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>Product Found</h3>
+              {product.productType === "diamond" && (
+                <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "#F0FDFA", color: "var(--accent-primary)" }}>
+                  <Diamond className="h-3 w-3" /> Diamond
+                </span>
+              )}
+              {product.productType === "gold" && (
+                <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: "#FFFBEB", color: "var(--accent-warning)" }}>
+                  <Coins className="h-3 w-3" /> Gold
+                </span>
+              )}
+              {product.specs.origin !== "unknown" && (
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{
+                  background: product.specs.origin === "natural" ? "#EFF6FF" : "#F0FDFA",
+                  color: product.specs.origin === "natural" ? "var(--accent-secondary)" : "var(--accent-primary)",
+                }}>
+                  {product.specs.origin === "natural" ? "Natural" : "Lab-Grown"}
+                </span>
+              )}
+            </div>
+
             <div className="mt-3 flex gap-4">
               {product.image && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -219,14 +272,33 @@ export default function DealCheckPage() {
                   {product.specs.shape && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--background-alt)", color: "var(--text-secondary)" }}>{product.specs.shape}</span>}
                   {product.specs.color && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--background-alt)", color: "var(--text-secondary)" }}>Color: {product.specs.color}</span>}
                   {product.specs.clarity && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--background-alt)", color: "var(--text-secondary)" }}>Clarity: {product.specs.clarity}</span>}
+                  {product.specs.cut && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--background-alt)", color: "var(--text-secondary)" }}>Cut: {product.specs.cut}</span>}
                   {product.specs.metal && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--background-alt)", color: "var(--text-secondary)" }}>{product.specs.metal}</span>}
+                  {product.specs.certLab && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "#EFF6FF", color: "var(--accent-secondary)" }}>{product.specs.certLab} Certified</span>}
                 </div>
               </div>
             </div>
+
             {!product.price && (
               <div className="mt-4 rounded-lg p-3" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.2)" }}>
                 <p className="text-sm" style={{ color: "var(--accent-warning)" }}>
                   Could not extract price from this page. Try entering the details manually above.
+                </p>
+              </div>
+            )}
+
+            {product.productType === "gold" && (
+              <div className="mt-4 rounded-lg p-3" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                <p className="text-sm" style={{ color: "var(--accent-warning)" }}>
+                  This appears to be a gold jewellery piece. Use our <a href="/au/gold-calculator" style={{ color: "var(--accent-primary)", fontWeight: 600 }}>Gold Calculator</a> for a melt value and making charge analysis.
+                </p>
+              </div>
+            )}
+
+            {product.productType === "unknown" && product.price && (
+              <div className="mt-4 rounded-lg p-3" style={{ background: "rgba(59,130,246,0.05)", border: "1px solid rgba(59,130,246,0.2)" }}>
+                <p className="text-sm" style={{ color: "var(--accent-secondary)" }}>
+                  We couldn&apos;t confidently identify the product type. Use the manual entry above to specify diamond details for a fair price comparison.
                 </p>
               </div>
             )}
@@ -243,7 +315,11 @@ export default function DealCheckPage() {
               {activeVerdict.verdict.label}
             </div>
             <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              This stone is priced at{" "}
+              This{" "}
+              <strong style={{ color: "var(--text-primary)" }}>
+                {"origin" in activeVerdict ? activeVerdict.origin : ""} diamond
+              </strong>{" "}
+              is priced at{" "}
               <strong className="font-mono" style={{ color: "var(--text-primary)" }}>${activeVerdict.asking.toLocaleString()}</strong>.
               Our fair price estimate is{" "}
               <strong className="font-mono" style={{ color: "var(--text-primary)" }}>${activeVerdict.fair.toLocaleString()}</strong>.
@@ -252,6 +328,12 @@ export default function DealCheckPage() {
                 {Math.abs(activeVerdict.diff).toFixed(0)}% {activeVerdict.diff > 0 ? "above" : "below"} fair value
               </span>.
             </p>
+
+            {"certLab" in activeVerdict && activeVerdict.certLab && (
+              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                Based on {activeVerdict.certLab}-certified {activeVerdict.origin?.toLowerCase()} diamond pricing
+              </p>
+            )}
 
             <div className="mt-6" style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>

@@ -17,22 +17,21 @@ export interface ScrapedProduct {
     metal: string | null
     origin: "natural" | "lab_grown" | "unknown"
     certLab: string | null
+    certNumber: string | null
     karatGold: string | null
     weightGrams: string | null
+    settingType: string | null
+    sideStones: boolean
   }
 }
 
 function extractPrice(html: string): number | null {
   const patterns = [
-    // JSON-LD product schema
     /"price"\s*:\s*"?([\d,]+\.?\d*)"?/,
-    // Shopify variant price
     /"price":([\d]+),"compare/,
     /"price":([\d]+)/,
-    // Common price display patterns
     /class="[^"]*price[^"]*"[^>]*>\s*\$?\s*([\d,]+\.?\d*)/i,
     /data-price="([\d.]+)"/,
-    // AUD price patterns
     /\$\s?([\d,]+\.?\d{0,2})\s*(?:AUD|aud)?/,
     /(?:price|Price|PRICE)[^$\d]*\$\s*([\d,]+\.?\d{0,2})/,
   ]
@@ -41,13 +40,8 @@ function extractPrice(html: string): number | null {
     const match = html.match(pattern)
     if (match?.[1]) {
       let price = parseFloat(match[1].replace(/,/g, ""))
-      // Shopify stores price in cents
-      if (price > 100000 && html.includes("Shopify")) {
-        price = price / 100
-      }
-      if (price > 0 && price < 1000000) {
-        return price
-      }
+      if (price > 100000 && html.includes("Shopify")) price = price / 100
+      if (price > 0 && price < 1000000) return price
     }
   }
   return null
@@ -56,13 +50,10 @@ function extractPrice(html: string): number | null {
 function extractProductName(html: string): string | null {
   const jsonLdMatch = html.match(/"name"\s*:\s*"([^"]+)"/)
   if (jsonLdMatch?.[1] && jsonLdMatch[1].length < 200) return jsonLdMatch[1]
-
   const ogMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i)
   if (ogMatch?.[1]) return ogMatch[1]
-
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
   if (titleMatch?.[1]) return titleMatch[1].split("|")[0].split("–")[0].trim()
-
   return null
 }
 
@@ -82,142 +73,174 @@ function extractRetailer(url: string): string {
 }
 
 function extractSpecs(html: string, name: string | null, url: string): ScrapedProduct["specs"] {
-  // Combine name, URL, and first 30K of HTML for analysis
-  const text = [name || "", url, html.substring(0, 30000)].join(" ")
+  const text = [name || "", url, html.substring(0, 50000)].join("\n")
   const lower = text.toLowerCase()
 
-  // --- Diamond Origin Detection ---
+  // --- Origin ---
   let origin: "natural" | "lab_grown" | "unknown" = "unknown"
   let certLab: string | null = null
+  let certNumber: string | null = null
 
-  // Check for certification lab
-  if (/\bgia\b/i.test(text)) { certLab = "GIA"; origin = "natural" } // GIA overwhelmingly certifies natural
-  if (/\bigi\b/i.test(text)) { certLab = "IGI" } // IGI does both but skews lab-grown
+  if (/\bgia\b/i.test(text)) { certLab = "GIA"; origin = "natural" }
+  if (/\bigi\b/i.test(text)) { certLab = "IGI" }
   if (/\bgcal\b/i.test(text)) { certLab = "GCAL" }
 
-  // Explicit lab-grown indicators (override cert-based guess)
-  const labGrownSignals = ["lab grown", "lab-grown", "lab created", "lab-created", "cvd", "hpht", "laboratory grown", "lab diamond", "created diamond", "synthetic diamond"]
-  for (const signal of labGrownSignals) {
-    if (lower.includes(signal)) { origin = "lab_grown"; break }
-  }
+  // Explicit origin signals
+  const labSignals = ["lab grown", "lab-grown", "lab created", "lab-created", "cvd", "hpht", "laboratory grown"]
+  for (const s of labSignals) { if (lower.includes(s)) { origin = "lab_grown"; break } }
+  const natSignals = ["natural diamond", "mined diamond", "earth-grown", "stone type: natural", "natural certified"]
+  for (const s of natSignals) { if (lower.includes(s)) { origin = "natural"; break } }
 
-  // Explicit natural indicators
-  const naturalSignals = ["natural diamond", "mined diamond", "earth-grown", "earth grown", "natural certified"]
-  for (const signal of naturalSignals) {
-    if (lower.includes(signal)) { origin = "natural"; break }
-  }
-
-  // If IGI and no explicit indicator, lean lab-grown (IGI is primary lab-grown certifier in AU market)
   if (certLab === "IGI" && origin === "unknown") origin = "lab_grown"
-  // If GIA, lean natural unless overridden above
   if (certLab === "GIA" && origin === "unknown") origin = "natural"
+
+  // Certificate number (long numeric string near "certificate")
+  const certMatch = text.match(/(?:certificate|cert(?:ification)?)\s*[:#]?\s*(\d{6,})/i)
+  if (certMatch) certNumber = certMatch[1]
 
   // --- Carat ---
   let carat: string | null = null
+  // Pattern: "1.00ct" or "1.00 ct" or "1ct" or "Diamond : 1.00ct"
   const caratPatterns = [
-    /(\d+\.?\d*)\s*(?:ct|carat|carats)\b/i,
+    /(?:diamond|stone)\s*[:\-]?\s*(\d+\.?\d*)\s*ct/i,
+    /(\d+\.?\d*)\s*ct\.?\s/i,
+    /(\d+\.?\d*)\s*(?:carat|carats)\b/i,
     /(?:carat|ct)[:\s]+(\d+\.?\d*)/i,
   ]
   for (const p of caratPatterns) {
     const m = text.match(p)
-    if (m?.[1] && parseFloat(m[1]) > 0 && parseFloat(m[1]) < 30) {
-      carat = m[1]; break
-    }
+    if (m?.[1] && parseFloat(m[1]) > 0 && parseFloat(m[1]) < 30) { carat = m[1]; break }
   }
 
-  // --- Shape (search URL first as it's most reliable) ---
+  // --- Shape ---
   let shape: string | null = null
   const shapeWords = ["round", "oval", "cushion", "princess", "emerald", "pear", "radiant", "asscher", "marquise", "heart"]
-  // Prioritise URL and product name over body HTML
-  const priorityText = [url, name || ""].join(" ").toLowerCase()
+  // Check URL first (most reliable signal — e.g. "celeste-1ct-oval-gia")
+  const urlLower = url.toLowerCase()
   for (const s of shapeWords) {
-    if (priorityText.includes(s)) { shape = s.charAt(0).toUpperCase() + s.slice(1); break }
+    if (urlLower.includes(s)) { shape = s.charAt(0).toUpperCase() + s.slice(1); break }
   }
-  // Fallback to HTML body
+  // Then product name
+  if (!shape && name) {
+    const nameLower = name.toLowerCase()
+    for (const s of shapeWords) {
+      if (nameLower.includes(s)) { shape = s.charAt(0).toUpperCase() + s.slice(1); break }
+    }
+  }
+  // Then body text — look near "diamond" keyword for more accurate match
+  if (!shape) {
+    const diamondContext = lower.match(/diamond[^.]{0,80}/g) || []
+    const contextText = diamondContext.join(" ")
+    for (const s of shapeWords) {
+      if (contextText.includes(s)) { shape = s.charAt(0).toUpperCase() + s.slice(1); break }
+    }
+  }
+  // Final fallback — anywhere in page
   if (!shape) {
     for (const s of shapeWords) {
       if (lower.includes(s)) { shape = s.charAt(0).toUpperCase() + s.slice(1); break }
     }
   }
 
-  // --- Color ---
+  // --- Color & Clarity ---
+  // These often appear together: "VS1 H" or "H VS1" or "Color: H, Clarity: VS1"
   let color: string | null = null
-  const colorPatterns = [
-    /(?:colo[u]?r)\s*[:\-]\s*([D-K])\b/i,
-    /\b([D-K])\s+(?:colo[u]?r)/i,
-    /(?:grade|quality)\s*[:\-]\s*[^,]*?([D-K])\b/i,
-  ]
-  for (const p of colorPatterns) {
-    const m = text.match(p)
-    if (m?.[1]) { color = m[1].toUpperCase(); break }
+  let clarity: string | null = null
+
+  const clarityGrades = ["FL", "IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "I1", "I2", "I3"]
+
+  // Pattern 1: "Info: VS1 H" or "VS1 H" or "H VS1"
+  const comboPattern1 = /\b(FL|IF|VVS[12]|VS[12]|SI[12]|I[123])\s+([D-K])\b/i
+  const comboPattern2 = /\b([D-K])\s+(FL|IF|VVS[12]|VS[12]|SI[12]|I[123])\b/i
+  const m1 = text.match(comboPattern1)
+  const m2 = text.match(comboPattern2)
+  if (m1) { clarity = m1[1].toUpperCase(); color = m1[2].toUpperCase() }
+  else if (m2) { color = m2[1].toUpperCase(); clarity = m2[2].toUpperCase() }
+
+  // Pattern 2: labeled "Color: H" and "Clarity: VS1"
+  if (!color) {
+    const colorMatch = text.match(/(?:colo[u]?r)\s*[:\-]\s*([D-K])\b/i)
+    if (colorMatch) color = colorMatch[1].toUpperCase()
+  }
+  if (!clarity) {
+    const clarityMatch = text.match(/(?:clarity)\s*[:\-]\s*(FL|IF|VVS[12]|VS[12]|SI[12]|I[123])\b/i)
+    if (clarityMatch) clarity = clarityMatch[1].toUpperCase()
   }
 
-  // --- Clarity ---
-  let clarity: string | null = null
-  const clarityPatterns = [
-    /(?:clarity)\s*[:\-]\s*(FL|IF|VVS[12]|VS[12]|SI[12]|I[123])\b/i,
-    /\b(FL|IF|VVS[12]|VS[12]|SI[12]|I[123])\s+(?:clarity)/i,
-    /\b(VVS[12]|VS[12]|SI[12])\b/i, // standalone clarity grades
-  ]
-  for (const p of clarityPatterns) {
-    const m = text.match(p)
-    if (m?.[1]) { clarity = m[1].toUpperCase(); break }
+  // Pattern 3: standalone clarity grade near "diamond" context
+  if (!clarity) {
+    for (const g of clarityGrades) {
+      const regex = new RegExp(`\\b${g}\\b`, "i")
+      if (regex.test(text)) { clarity = g; break }
+    }
   }
 
   // --- Cut ---
   let cut: string | null = null
   const cutMatch = text.match(/(?:cut)\s*[:\-]\s*(excellent|ideal|very good|good|fair|poor)/i)
-  if (cutMatch) cut = cutMatch[1]
+  if (cutMatch) cut = cutMatch[1].charAt(0).toUpperCase() + cutMatch[1].slice(1).toLowerCase()
 
   // --- Metal ---
   let metal: string | null = null
   const metalPatterns = [
-    { regex: /\b(18k|18ct|18\s*karat)\b/i, label: "18K" },
-    { regex: /\b(14k|14ct|14\s*karat)\b/i, label: "14K" },
-    { regex: /\b(9k|9ct|9\s*karat)\b/i, label: "9K" },
-    { regex: /\b(22k|22ct|22\s*karat)\b/i, label: "22K" },
-    { regex: /\b(24k|24ct|24\s*karat)\b/i, label: "24K" },
+    { regex: /\b18\s*k(?:t)?\s*(yellow|white|rose)?\s*gold\b/i, label: "18K Gold" },
+    { regex: /\b14\s*k(?:t)?\s*(yellow|white|rose)?\s*gold\b/i, label: "14K Gold" },
+    { regex: /\b9\s*k(?:t)?\s*(yellow|white|rose)?\s*gold\b/i, label: "9K Gold" },
+    { regex: /\b(18k|18ct)\b/i, label: "18K Gold" },
+    { regex: /\b(14k|14ct)\b/i, label: "14K Gold" },
+    { regex: /\b(9k|9ct)\b/i, label: "9K Gold" },
     { regex: /\bplatinum\b/i, label: "Platinum" },
     { regex: /\brose\s*gold\b/i, label: "Rose Gold" },
     { regex: /\bwhite\s*gold\b/i, label: "White Gold" },
     { regex: /\byellow\s*gold\b/i, label: "Yellow Gold" },
   ]
   for (const { regex, label } of metalPatterns) {
-    if (regex.test(text)) { metal = label; break }
+    const match = text.match(regex)
+    if (match) {
+      // Add color detail if captured
+      const colorWord = match[1]?.toLowerCase()
+      if (colorWord && ["yellow", "white", "rose"].includes(colorWord)) {
+        metal = label.replace("Gold", `${colorWord.charAt(0).toUpperCase() + colorWord.slice(1)} Gold`)
+      } else {
+        metal = label
+      }
+      break
+    }
   }
 
-  // --- Gold-specific: karat and weight ---
+  // --- Setting type ---
+  let settingType: string | null = null
+  const settingPatterns = ["solitaire", "halo", "pavé", "pave", "channel", "bezel", "prong", "tension", "cathedral", "vintage", "engagement ring", "wedding band", "eternity"]
+  for (const s of settingPatterns) {
+    if (lower.includes(s)) { settingType = s.charAt(0).toUpperCase() + s.slice(1); break }
+  }
+
+  // --- Side stones ---
+  const sideStones = /side\s*stone|accent|shoulder|pav[eé]/i.test(text)
+
+  // --- Gold-specific ---
   let karatGold: string | null = null
   let weightGrams: string | null = null
-  const goldKaratMatch = lower.match(/\b(9|14|18|22|24)\s*(?:k|kt|ct|karat|carat)\b/)
+  const goldKaratMatch = lower.match(/\b(9|14|18|22|24)\s*(?:k|kt|ct|karat)\b/)
   if (goldKaratMatch) karatGold = goldKaratMatch[1] + "K"
-
   const weightMatch = text.match(/([\d.]+)\s*(?:grams?|gms?|g\b)/i)
   if (weightMatch) weightGrams = weightMatch[1]
 
-  return { carat, shape, color, clarity, cut, metal, origin, certLab, karatGold, weightGrams }
+  return { carat, shape, color, clarity, cut, metal, origin, certLab, certNumber, karatGold, weightGrams, settingType, sideStones }
 }
 
 function detectProductType(specs: ScrapedProduct["specs"], name: string | null, html: string): "diamond" | "gold" | "unknown" {
   const text = [name || "", html.substring(0, 15000)].join(" ").toLowerCase()
-
-  // Strong diamond signals
-  const diamondSignals = ["diamond", "carat", "ct ", "gia", "igi", "gcal", "brilliant", "solitaire", "lab grown", "lab-grown"]
+  const diamondSignals = ["diamond", "carat", "ct ", "gia", "igi", "gcal", "solitaire", "lab grown"]
   let diamondScore = 0
-  for (const s of diamondSignals) {
-    if (text.includes(s)) diamondScore++
-  }
+  for (const s of diamondSignals) { if (text.includes(s)) diamondScore++ }
   if (specs.carat) diamondScore += 2
   if (specs.certLab) diamondScore += 3
 
-  // Strong gold signals (without diamond)
-  const goldOnlySignals = ["gold chain", "gold bangle", "gold bracelet", "gold necklace", "gold earring", "pure gold", "gold bar", "gold coin"]
+  const goldOnlySignals = ["gold chain", "gold bangle", "gold bracelet", "gold necklace", "gold earring", "pure gold", "gold bar"]
   let goldScore = 0
-  for (const s of goldOnlySignals) {
-    if (text.includes(s)) goldScore += 2
-  }
+  for (const s of goldOnlySignals) { if (text.includes(s)) goldScore += 2 }
   if (specs.karatGold && !specs.carat) goldScore += 2
-  if (specs.weightGrams) goldScore++
 
   if (diamondScore >= 2) return "diamond"
   if (goldScore >= 2) return "gold"
@@ -235,12 +258,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 })
     }
 
-    let parsedUrl: URL
     try {
-      parsedUrl = new URL(url)
-      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-        throw new Error("Invalid protocol")
-      }
+      const parsedUrl = new URL(url)
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new Error("bad")
     } catch {
       return NextResponse.json({ error: "Invalid URL" }, { status: 400 })
     }
@@ -266,9 +286,7 @@ export async function POST(request: NextRequest) {
     const specs = extractSpecs(html, name, url)
     const productType = detectProductType(specs, name, html)
 
-    const product: ScrapedProduct = { name, price, currency: "AUD", image, retailer, url, productType, specs }
-
-    return NextResponse.json(product)
+    return NextResponse.json({ name, price, currency: "AUD", image, retailer, url, productType, specs } as ScrapedProduct)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ error: `Failed to check deal: ${message}` }, { status: 500 })

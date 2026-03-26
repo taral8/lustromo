@@ -55,13 +55,30 @@ export function getDiamondPrices(origin: DiamondOrigin, shape?: DiamondShape): D
 // Base prices for calculator (lab-grown)
 export const labGrownBasePrice: Record<number, number> = { 0.5: 380, 1: 1420, 1.5: 2100, 2: 3200, 3: 5800 }
 
+// Estimated setting/metal costs (AUD) — added to diamond value for total ring price
+export const settingCosts: Record<string, number> = {
+  "9K Gold": 250,
+  "14K Gold": 450,
+  "18K Gold": 700,
+  "18K Yellow Gold": 700,
+  "18K White Gold": 750,
+  "18K Rose Gold": 720,
+  "14K Yellow Gold": 450,
+  "14K White Gold": 480,
+  "14K Rose Gold": 460,
+  "Platinum": 1200,
+  "Rose Gold": 700,
+  "White Gold": 750,
+  "Yellow Gold": 700,
+}
+
 export function estimateDiamondPrice(
   carat: number, color: string, clarity: string, origin: DiamondOrigin
-): { fairPrice: number; low: number; high: number } {
+): { fairPrice: number; low: number; high: number; diamondOnly: number } {
   const colorGrades = ["D","E","F","G","H","I","J","K"]
   const clarityGrades = ["FL","IF","VVS1","VVS2","VS1","VS2","SI1","SI2"]
-  const colorIdx = colorGrades.indexOf(color)
-  const clarityIdx = clarityGrades.indexOf(clarity)
+  const colorIdx = Math.max(0, colorGrades.indexOf(color))
+  const clarityIdx = Math.max(0, clarityGrades.indexOf(clarity))
 
   // Find closest carat base
   const carats = [0.5, 1, 1.5, 2, 3]
@@ -87,7 +104,24 @@ export function estimateDiamondPrice(
 
   if (origin === "natural") price *= 4.5
 
+  const diamondOnly = Math.round(price)
   const low = Math.round(price * 0.85)
   const high = Math.round(price * 1.15)
-  return { fairPrice: Math.round(price), low, high }
+  return { fairPrice: diamondOnly, low, high, diamondOnly }
+}
+
+export function estimateTotalPrice(
+  carat: number, color: string, clarity: string, origin: DiamondOrigin,
+  metal: string | null, hasSideStones: boolean
+): { total: number; totalLow: number; totalHigh: number; diamondValue: number; settingValue: number; sideStoneValue: number } {
+  const diamond = estimateDiamondPrice(carat, color, clarity, origin)
+  const settingValue = metal ? (settingCosts[metal] ?? 600) : 600
+  // Side stones typically add $300-$800 for pavé/halo
+  const sideStoneValue = hasSideStones ? 500 : 0
+
+  const total = diamond.fairPrice + settingValue + sideStoneValue
+  const totalLow = diamond.low + Math.round(settingValue * 0.8) + Math.round(sideStoneValue * 0.7)
+  const totalHigh = diamond.high + Math.round(settingValue * 1.3) + Math.round(sideStoneValue * 1.3)
+
+  return { total, totalLow, totalHigh, diamondValue: diamond.fairPrice, settingValue, sideStoneValue }
 }

@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ShieldCheck, Loader2, AlertCircle, ExternalLink, Diamond, Coins } from "lucide-react"
-import { estimateDiamondPrice, type DiamondOrigin } from "@/lib/diamond-data"
+import { estimateDiamondPrice, estimateTotalPrice, type DiamondOrigin } from "@/lib/diamond-data"
 
 interface ScrapedProduct {
   name: string | null
@@ -24,8 +24,11 @@ interface ScrapedProduct {
     metal: string | null
     origin: "natural" | "lab_grown" | "unknown"
     certLab: string | null
+    certNumber: string | null
     karatGold: string | null
     weightGrams: string | null
+    settingType: string | null
+    sideStones: boolean
   }
 }
 
@@ -93,11 +96,16 @@ export default function DealCheckPage() {
     const color = product.specs.color || "G"
     const clarity = product.specs.clarity || "VS2"
     const origin: DiamondOrigin = product.specs.origin === "natural" ? "natural" : "lab_grown"
-    const estimate = estimateDiamondPrice(carat, color, clarity, origin)
-    const diff = ((product.price - estimate.fairPrice) / estimate.fairPrice) * 100
+    const estimate = estimateTotalPrice(carat, color, clarity, origin, product.specs.metal, product.specs.sideStones)
+    const diff = ((product.price - estimate.total) / estimate.total) * 100
     scrapedVerdict = {
       asking: product.price,
-      fair: estimate.fairPrice,
+      fair: estimate.total,
+      fairLow: estimate.totalLow,
+      fairHigh: estimate.totalHigh,
+      diamondValue: estimate.diamondValue,
+      settingValue: estimate.settingValue,
+      sideStoneValue: estimate.sideStoneValue,
       diff,
       verdict: getVerdict(diff),
       origin: origin === "natural" ? "Natural" : "Lab-Grown",
@@ -322,15 +330,47 @@ export default function DealCheckPage() {
               is priced at{" "}
               <strong className="font-mono" style={{ color: "var(--text-primary)" }}>${activeVerdict.asking.toLocaleString()}</strong>.
               Our fair price estimate is{" "}
-              <strong className="font-mono" style={{ color: "var(--text-primary)" }}>${activeVerdict.fair.toLocaleString()}</strong>.
-              That&apos;s{" "}
+              <strong className="font-mono" style={{ color: "var(--text-primary)" }}>${activeVerdict.fair.toLocaleString()}</strong>
+              {"fairLow" in activeVerdict && (
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {" "}(range: ${activeVerdict.fairLow?.toLocaleString()} – ${activeVerdict.fairHigh?.toLocaleString()})
+                </span>
+              )}.
+              {" "}That&apos;s{" "}
               <span className="font-mono font-semibold" style={{ color: activeVerdict.verdict.color }}>
                 {Math.abs(activeVerdict.diff).toFixed(0)}% {activeVerdict.diff > 0 ? "above" : "below"} fair value
               </span>.
             </p>
 
+            {/* Price breakdown */}
+            {"diamondValue" in activeVerdict && (
+              <div className="mx-auto mt-4 max-w-xs text-left">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Price Breakdown</p>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span style={{ color: "var(--text-secondary)" }}>Diamond value</span>
+                    <span className="font-mono font-medium" style={{ color: "var(--text-primary)" }}>${activeVerdict.diamondValue?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span style={{ color: "var(--text-secondary)" }}>Setting / metal</span>
+                    <span className="font-mono font-medium" style={{ color: "var(--text-primary)" }}>${activeVerdict.settingValue?.toLocaleString()}</span>
+                  </div>
+                  {(activeVerdict.sideStoneValue ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span style={{ color: "var(--text-secondary)" }}>Side stones</span>
+                      <span className="font-mono font-medium" style={{ color: "var(--text-primary)" }}>${activeVerdict.sideStoneValue?.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-1" style={{ borderTop: "1px solid var(--border)" }}>
+                    <span className="font-medium" style={{ color: "var(--text-primary)" }}>Estimated total</span>
+                    <span className="font-mono font-bold" style={{ color: "var(--text-primary)" }}>${activeVerdict.fair.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {"certLab" in activeVerdict && activeVerdict.certLab && (
-              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
                 Based on {activeVerdict.certLab}-certified {activeVerdict.origin?.toLowerCase()} diamond pricing
               </p>
             )}

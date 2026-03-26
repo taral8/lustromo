@@ -69,21 +69,28 @@ function parseProduct(product: ShopifyProduct, baseUrl: string): ParsedDiamond |
   const text = [product.title, product.body_html, product.tags.join(" ")].join(" ")
   const lower = text.toLowerCase()
 
-  // Skip non-diamond products
-  if (!lower.includes("diamond") && !lower.includes("carat") && !lower.includes("ct ")) {
+  // Skip non-diamond products — check for diamond-related signals
+  const diamondSignals = ["diamond", "carat", "ct ", "gia", "igi", "gcal", "solitaire", "engagement ring", "natural", "lab grown", "lab-grown"]
+  const hasDiamondSignal = diamondSignals.some(s => lower.includes(s))
+  // Also check if title has carat pattern like "1ct" or "0.5ct"
+  const hasCarat = /\d+\.?\d*ct/i.test(product.title)
+  if (!hasDiamondSignal && !hasCarat) {
     return null
   }
 
   const price = parseFloat(product.variants[0]?.price || "0")
   if (price <= 0) return null
 
-  // Origin
+  // Origin — default to natural, override if lab signals found
   let origin: "natural" | "lab_grown" = "natural"
-  const labSignals = ["lab grown", "lab-grown", "lab created", "cvd", "hpht", "laboratory"]
+  const labSignals = ["lab grown", "lab-grown", "lab created", "lab diamond", "cvd", "hpht", "laboratory"]
   for (const s of labSignals) {
     if (lower.includes(s)) { origin = "lab_grown"; break }
   }
-  if (lower.includes("natural diamond") || lower.includes("natural stone")) origin = "natural"
+  // "Natural" in title or body confirms natural
+  if (/\bnatural\b/i.test(product.title)) origin = "natural"
+  // IGI without "natural" usually means lab-grown in AU market
+  if (/\bigi\b/i.test(text) && !/\bnatural\b/i.test(text)) origin = "lab_grown"
 
   // Carat
   let carat: number | null = null

@@ -1,0 +1,59 @@
+{
+  "name": "Lustrumo — Independent Jewellery Intelligence",
+  "short_name": "Lustrumo",
+  "description": "Diamond prices, gold valuations, retailer ratings, and certification verification — the data you need before you buy.",
+  "start_url": "/au",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0D9488",
+  "categories": ["finance", "shopping", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Diamond Prices",
+      "short_name": "Diamonds",
+      "url": "/au/diamond-prices",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Gold Calculator",
+      "short_name": "Gold",
+      "url": "/au/gold-calculator",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Deal Checker",
+      "short_name": "Deal Check",
+      "url": "/au/deal-check",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

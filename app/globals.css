@@ -59,3 +59,70 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── PWA: Safe areas & standalone mode ─── */
+
+/* iOS safe area support */
+html {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Standalone mode: show bottom nav, add padding */
+@media (display-mode: standalone) {
+  body {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    overscroll-behavior-y: none;
+  }
+
+  /* Hide the desktop footer in standalone — bottom nav replaces it */
+  footer {
+    display: none;
+  }
+
+  /* Show bottom nav only in standalone */
+  .bottom-nav {
+    display: block !important;
+  }
+
+  /* Allow text selection in inputs and content */
+  input, textarea, [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  article, .prose, p, td, th, li {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+/* Hide bottom nav in browser mode */
+.bottom-nav {
+  display: none;
+}
+
+/* iOS standalone: translucent status bar overlap */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (display-mode: standalone) {
+    header.sticky {
+      padding-top: env(safe-area-inset-top, 0px);
+      height: calc(64px + env(safe-area-inset-top, 0px));
+    }
+  }
+}
+
+/* Prevent overscroll bounce in standalone */
+@media (display-mode: standalone) {
+  html, body {
+    overscroll-behavior: none;
+  }
+}
+
+/* Smoother touch scrolling */
+@layer utilities {
+  .scroll-smooth-touch {
+    -webkit-overflow-scrolling: touch;
+  }
+}

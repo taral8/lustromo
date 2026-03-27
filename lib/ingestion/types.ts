@@ -122,6 +122,9 @@ export interface NormalisedProduct {
   gold_weight_grams: number | null
   gold_purity: number | null
 
+  // Section 4.4 — Equivalent Value Class
+  evc: string | null
+
   data_quality_score: number
   data_quality_flags: FlagType[]
 

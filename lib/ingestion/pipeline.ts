@@ -1,8 +1,9 @@
 import { type SupabaseClient } from "@supabase/supabase-js"
-import { type ShopifyProduct, type NormalisedProduct, type DataQualityFlag, type FlagType, FLAG_SCORE_DEDUCTION } from "./types"
+import { type ShopifyProduct, type NormalisedProduct, type DataQualityFlag, type FlagType, FLAG_SCORE_DEDUCTION, FLAG_SEVERITY } from "./types"
 import { validatePrice } from "./price-validation"
 import { classifyProduct } from "./classify"
 import { parseShopifyProduct } from "./parse-shopify"
+import { computeEVC } from "./evc"
 
 let idCounter = 0
 
@@ -103,6 +104,16 @@ export function normaliseShopifyProduct(
     else settingTier = "standard"
   }
 
+  // Section 4.4 — Compute Equivalent Value Class
+  const evc = computeEVC({
+    diamondType: specs.diamondType,
+    carat: specs.carat,
+    color: specs.color,
+    clarity: specs.clarity,
+    shape: specs.shape,
+    certBody: specs.certBody,
+  })
+
   return {
     lustrumo_id: generateLustrumoId(),
     retailer_id: retailerId,
@@ -148,11 +159,44 @@ export function normaliseShopifyProduct(
     gold_weight_grams: specs.goldWeightGrams,
     gold_purity: specs.goldPurity,
 
+    evc,
+
     data_quality_score: score,
     data_quality_flags: flagTypes,
 
     locale: "au",
     raw_body_html: (product.body_html || "").substring(0, 10000), // cap storage
+  }
+}
+
+/**
+ * Section 9 Rule 5: Deduplicate by cert number.
+ * If two products share the same GIA/IGI cert number, flag both as duplicate_product.
+ */
+function detectDuplicateCerts(products: NormalisedProduct[]): void {
+  const certMap = new Map<string, NormalisedProduct[]>()
+
+  for (const p of products) {
+    const cert = p.diamond_centre_cert_number
+    if (!cert) continue
+    const existing = certMap.get(cert)
+    if (existing) {
+      existing.push(p)
+    } else {
+      certMap.set(cert, [p])
+    }
+  }
+
+  for (const [cert, dupes] of Array.from(certMap.entries())) {
+    if (dupes.length < 2) continue
+    for (const p of dupes) {
+      if (!p.data_quality_flags.includes("duplicate_product")) {
+        p.data_quality_flags.push("duplicate_product")
+        // Recalculate score with the new flag
+        p.data_quality_score = Math.max(0, p.data_quality_score - FLAG_SCORE_DEDUCTION.duplicate_product)
+      }
+    }
+    console.log(`  Duplicate cert ${cert} found on ${dupes.length} products`)
   }
 }
 
@@ -165,6 +209,34 @@ export async function ingestProducts(
   products: NormalisedProduct[],
   retailerId: string
 ): Promise<{ ingested: number; flagged: number; flagsSummary: Record<string, number> }> {
+  // Section 9 Rule 5: detect duplicate certs within this batch
+  detectDuplicateCerts(products)
+
+  // Also check against existing products in the database
+  const certsInBatch = products
+    .map(p => p.diamond_centre_cert_number)
+    .filter((c): c is string => !!c)
+
+  if (certsInBatch.length > 0) {
+    const { data: existing } = await supabase
+      .from("products")
+      .select("diamond_centre_cert_number, retailer_id")
+      .in("diamond_centre_cert_number", certsInBatch)
+      .neq("retailer_id", retailerId)
+
+    if (existing?.length) {
+      const existingCerts = new Set(existing.map(e => e.diamond_centre_cert_number))
+      for (const p of products) {
+        if (p.diamond_centre_cert_number && existingCerts.has(p.diamond_centre_cert_number)) {
+          if (!p.data_quality_flags.includes("duplicate_product")) {
+            p.data_quality_flags.push("duplicate_product")
+            p.data_quality_score = Math.max(0, p.data_quality_score - FLAG_SCORE_DEDUCTION.duplicate_product)
+          }
+        }
+      }
+    }
+  }
+
   let ingested = 0
   let flagged = 0
   const flagsSummary: Record<string, number> = {}
@@ -197,7 +269,7 @@ export async function ingestProducts(
           retailer_product_id: product.retailer_product_id,
           product_url: product.product_url,
           flag_type: flagType,
-          flag_severity: flagType.startsWith("price") ? "HIGH" : flagType.startsWith("missing") ? "MEDIUM" : "MEDIUM",
+          flag_severity: FLAG_SEVERITY[flagType] || "MEDIUM",
           flag_message: `Auto-flagged during ingestion`,
           raw_value: null,
         }

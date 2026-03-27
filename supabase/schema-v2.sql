@@ -71,6 +71,9 @@ CREATE TABLE products (
   gold_spot_price_aud_per_gram DECIMAL(10,4),
   gold_intrinsic_value_aud DECIMAL(10,2),
 
+  -- Section 4.4 — Equivalent Value Class
+  evc TEXT,                                      -- e.g. LAB-1.00-FG-VS-OVAL-IGI
+
   -- Data Quality (Section 4)
   data_quality_score INTEGER NOT NULL DEFAULT 100,
   data_quality_flags TEXT[] DEFAULT '{}',
@@ -89,6 +92,7 @@ CREATE INDEX idx_products_retailer ON products (retailer_id, is_available);
 CREATE INDEX idx_products_cert ON products (diamond_centre_cert_number) WHERE diamond_centre_cert_number IS NOT NULL;
 CREATE INDEX idx_products_available ON products (is_available, locale, product_type);
 CREATE INDEX idx_products_url ON products (product_url);
+CREATE INDEX idx_products_evc ON products (evc, price_aud) WHERE evc IS NOT NULL;
 
 -- ============================================
 -- 2. INGESTION LOGS (Section 4 + Section 9)

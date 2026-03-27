@@ -9,7 +9,8 @@
     "lint": "next lint",
     "scrape": "tsx scripts/scrape-retailer.ts",
     "scrape:all": "tsx scripts/scrape-retailer.ts --all",
-    "aggregate": "tsx scripts/aggregate-prices.ts"
+    "aggregate": "tsx scripts/aggregate-prices.ts",
+    "seed:retailers": "tsx scripts/seed-retailers.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

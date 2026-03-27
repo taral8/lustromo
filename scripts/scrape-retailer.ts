@@ -96,17 +96,32 @@ async function scrapeRetailer(slug: string) {
     // Normalise all products through the pipeline
     const normalised = []
     let skipped = 0
+    let skippedNonLabGrown = 0
 
     for (const product of shopifyProducts) {
       const result = normaliseShopifyProduct(product, retailerId, retailer.website_url)
-      if (result) {
-        normalised.push(result)
-      } else {
+      if (!result) {
         skipped++
+        continue
       }
+
+      // Phase 1: Lab-grown diamonds only (SKILL.md Section 1.2)
+      const isLabGrown = result.diamond_centre_type === "lab_grown"
+      const isDiamondType = result.product_type.includes("diamond") || result.product_type.includes("engagement")
+      if (isDiamondType && !isLabGrown) {
+        skippedNonLabGrown++
+        continue
+      }
+      // Also skip non-diamond products for now (gold, silver, etc. come in later phases)
+      if (!isDiamondType) {
+        skipped++
+        continue
+      }
+
+      normalised.push(result)
     }
 
-    console.log(`  Normalised: ${normalised.length} products (${skipped} skipped — not jewellery)`)
+    console.log(`  Normalised: ${normalised.length} lab-grown diamonds (${skipped} skipped non-jewellery, ${skippedNonLabGrown} skipped natural diamonds)`)
 
     // Quality breakdown
     const byType: Record<string, number> = {}

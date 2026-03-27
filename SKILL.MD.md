@@ -19,7 +19,45 @@ Lustrumo is a consumer and retailer-facing jewellery intelligence platform. It i
 
 **Primary users:** Both consumers researching before purchase, and retailers benchmarking their pricing and data quality.
 
+**Strategic positioning:** Lustrumo is NOT a price comparison site. It is a value intelligence platform — a truth engine. The nuance in jewellery pricing is not an obstacle, it is the moat. Anyone can list prices side by side. Only Lustrumo structures the variables that retailers intentionally hide.
+
+> "Morningstar for jewellery" — know what it's really worth.
+
 **Platform voice:** Analytical, authoritative, precise. Bloomberg/Moody's aesthetic — data-first, no fluff. Never sensationalise. State facts, flag anomalies, let data speak.
+
+### 1.1 User Segments
+
+**Consumer (B2C):**
+- Researching before buying an engagement ring, gold piece, or certified diamond
+- Wants to know: "Is this worth it?" — not "Is this cheaper than that?"
+- Primary entry point: Deal Checker → Diamond Price Tracker → Certification Verifier
+
+**Retailer / B2B:**
+- Jewellers benchmarking their pricing against competitors and market fundamentals
+- Diamond labs and wholesalers tracking pricing trends (especially lab-grown collapse vs natural stability)
+- Investors monitoring lab-grown vs natural diamond price divergence over time
+- B2B access via API or dashboard — separate product tier, higher revenue per user
+
+### 1.2 Entry Point Strategy
+
+Build in this order — easiest data, highest consumer confusion first:
+
+```
+1. Lab-grown diamonds  ← START HERE
+   - Most standardised specs
+   - Prices collapsing → massive consumer confusion → high demand for clarity
+   - Easiest to scrape and benchmark
+
+2. Gold jewellery
+   - Fully formula-driven (weight × purity × spot price)
+   - Quick win, clear value demonstration
+
+3. Natural diamonds
+   - More complex, Rapaport-dependent
+   - Higher value per transaction
+
+4. Custom / bespoke jewellery  ← last, hardest
+```
 
 **Tech stack:** Next.js 14, TypeScript, Tailwind, Supabase, Claude API, Stripe, Apify, shadcn/ui.
 
@@ -371,6 +409,32 @@ fair_value_mid  = (fair_value_low + fair_value_high) / 2
 
 Display format: `$6,271 – $8,813 (mid: $7,507)`
 
+### 4.4 Equivalent Value Class (EVC)
+
+The core concept that separates Lustrumo from a simple comparison site. Instead of comparing SKUs directly, assign every product an EVC — a standardised value bucket based on its deconstructed components.
+
+**EVC is defined by:**
+```
+diamond_type + carat_band + color_band + clarity_band + shape + cert_body
+```
+
+**Example EVC:**
+```
+LAB-1.00-FG-VS-OVAL-IGI
+NAT-1.00-GH-VS1-ROUND-GIA
+```
+
+**Rules:**
+- Carat bands: 0.50–0.69 / 0.70–0.89 / 0.90–1.09 / 1.10–1.49 / 1.50–1.99 / 2.00+
+- Color bands: DEF / GH / IJ / KL+
+- Clarity bands: FL-IF / VVS / VS / SI1 / SI2 / I+
+- Products in the same EVC are directly comparable
+- Products in different EVCs are NOT directly comparable — show EVC alongside any comparison
+- Always display: "Comparing within value class: LAB-1.00-FG-VS-OVAL-IGI"
+
+**Why this matters:**
+Retailers intentionally avoid standardisation to prevent comparison. EVC forces like-for-like benchmarking without requiring identical products. This is the technical moat.
+
 ---
 
 ## 6. Comparison Tool Rules
@@ -460,7 +524,67 @@ When building or modifying the ingestion pipeline:
 
 ---
 
-## 10. Platform Tone & Copy Standards
+## 10. B2B Intelligence Layer
+
+Lustrumo's B2B tier is a separate product from the consumer tools. Build with future API access in mind from day one.
+
+### 10.1 B2B Use Cases
+
+| User Type | What They Need | Lustrumo Product |
+|-----------|---------------|-----------------|
+| Independent jeweller | How is my pricing vs market for equivalent products? | Retailer benchmarking dashboard |
+| Diamond wholesaler / lab | How are lab-grown prices trending by spec? | Price trend analytics by EVC |
+| Jewellery investor | Natural vs lab-grown price divergence over time | Market intelligence reports |
+| Retail chain buyer | Which specs are overpriced in the Australian market? | Market anomaly alerts |
+| Insurance valuator | Fair replacement value for a given spec | Valuation API |
+
+### 10.2 B2B Data Products
+
+**Retailer Benchmarking Dashboard:**
+- Upload your product catalogue
+- Lustrumo assigns EVC to each product
+- Shows: your price vs market median, percentile ranking, overpriced/underpriced flags
+- Delivered as dashboard or CSV export
+
+**Price Trend Analytics:**
+- Track average price by EVC over time
+- Lab-grown collapse tracking — critical insight as prices drop 80%+ vs natural
+- Natural diamond stability index
+- Weekly / monthly / quarterly views
+
+**Market Anomaly Alerts:**
+- Flag when a retailer prices significantly outside EVC band
+- Useful for competitor intelligence and consumer protection
+
+**Valuation API:**
+- Input: diamond specs or gold item details
+- Output: fair value range, EVC, confidence score, market context
+- Pricing: per-call or monthly subscription
+
+### 10.3 B2B Pricing Model (Indicative)
+
+```
+Retailer Benchmarking    $297/month   up to 500 products
+Wholesaler Analytics     $597/month   full trend data + EVC breakdown
+Valuation API            $0.50/call   or $299/month for 1,000 calls
+Enterprise               Custom       white-label + dedicated data feed
+```
+
+### 10.4 B2B Build Sequence
+
+Do NOT build B2B first. Consumer product must have traction and data volume before B2B is viable:
+
+```
+Phase 1 (now)      → Consumer tools — Deal Checker, Gold Calculator
+Phase 2            → Data volume — 10,000+ products ingested, EVC assigned
+Phase 3            → Retailer Ratings published — creates B2B awareness
+Phase 4            → B2B dashboard — retailers respond to their own ratings
+Phase 5            → Valuation API — productise the engine
+```
+
+---
+
+## 11. Platform Tone & Copy Standards
 
 - **Analytical, not alarmist** — "This product is priced 23% above our fair value estimate" not "OVERPRICED!"
 - **Precise** — always show the number, never vague ranges without context
@@ -472,7 +596,7 @@ When building or modifying the ingestion pipeline:
 
 ---
 
-## 11. Key References
+## 12. Key References
 
 - GIA 4Cs grading: https://www.gia.edu/4cs
 - IGI certificate lookup: https://www.igi.org/verify-your-report
@@ -483,4 +607,4 @@ When building or modifying the ingestion pipeline:
 
 ---
 
-*Last updated: March 2026 | Lustrumo Internal — not for distribution*
+*Last updated: March 2026 — added B2B layer, EVC, entry point strategy | Lustrumo Internal — not for distribution*

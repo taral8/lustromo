@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { TrendingUp, TrendingDown, Loader2 } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { TrendingUp, TrendingDown, Loader2, Layers, List, ExternalLink } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Sparkline } from "@/components/charts/sparkline"
@@ -12,8 +12,28 @@ import { shapeIcons, type DiamondShapeName } from "@/components/tools/diamond-sh
 const shapes: DiamondShape[] = ["round","cushion","oval","princess","emerald","pear","radiant","asscher","marquise","heart"]
 const caratSummaries = [0.5, 1.0, 2.0, 3.0]
 
+// EVC band filters — Section 4.4
+const COLOR_BANDS = [
+  { label: "All Colours", value: "" },
+  { label: "DEF", value: "DEF" },
+  { label: "GH", value: "GH" },
+  { label: "IJ", value: "IJ" },
+  { label: "KL+", value: "KL+" },
+]
+
+const CLARITY_BANDS = [
+  { label: "All Clarity", value: "" },
+  { label: "FL-IF", value: "FL-IF" },
+  { label: "VVS", value: "VVS" },
+  { label: "VS", value: "VS" },
+  { label: "SI1", value: "SI1" },
+  { label: "SI2", value: "SI2" },
+  { label: "I+", value: "I+" },
+]
+
 interface LiveDiamond {
   id: string
+  lustrumo_id: string
   product_name: string
   product_url: string
   retailer_name: string
@@ -21,42 +41,87 @@ interface LiveDiamond {
   carat: number
   color: string | null
   clarity: string | null
+  cut: string | null
   origin: string
   cert_lab: string | null
+  cert_number: string | null
   price: number
   metal: string | null
+  metal_karat: string | null
+  setting_style: string | null
+  side_stones: string | null
   image_url: string | null
+  evc: string | null
+  data_quality_score: number
+}
+
+interface EVCGroup {
+  count: number
+  avgPrice: number
+  minPrice: number
+  maxPrice: number
 }
 
 export default function DiamondPricesPage() {
   const [origin, setOrigin] = useState<DiamondOrigin>("lab_grown")
   const [shape, setShape] = useState<DiamondShape>("round")
+  const [colorBand, setColorBand] = useState("")
+  const [clarityBand, setClarityBand] = useState("")
   const [timeframe, setTimeframe] = useState("1M")
+  const [viewMode, setViewMode] = useState<"grouped" | "list">("grouped")
   const [liveDiamonds, setLiveDiamonds] = useState<LiveDiamond[]>([])
+  const [evcGroups, setEvcGroups] = useState<Record<string, EVCGroup>>({})
   const [loading, setLoading] = useState(true)
   const [isLiveData, setIsLiveData] = useState(false)
 
-  // Fetch live data from Supabase via API
+  // Fetch live data from products table via API
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/diamonds?origin=${origin}&shape=${shape}&locale=au&limit=100&sort=price`)
+    const params = new URLSearchParams({
+      origin, shape, locale: "au", limit: "200", sort: "price_aud",
+    })
+    if (colorBand) params.set("color_band", colorBand)
+    if (clarityBand) params.set("clarity_band", clarityBand)
+
+    fetch(`/api/diamonds?${params}`)
       .then(res => res.json())
       .then(data => {
         if (data.diamonds?.length > 0) {
           setLiveDiamonds(data.diamonds)
+          setEvcGroups(data.evcGroups || {})
           setIsLiveData(true)
         } else {
           setLiveDiamonds([])
+          setEvcGroups({})
           setIsLiveData(false)
         }
         setLoading(false)
       })
       .catch(() => {
         setLiveDiamonds([])
+        setEvcGroups({})
         setIsLiveData(false)
         setLoading(false)
       })
-  }, [origin, shape])
+  }, [origin, shape, colorBand, clarityBand])
+
+  // Group diamonds by EVC for the grouped view
+  const groupedByEVC = useMemo(() => {
+    const groups: Record<string, LiveDiamond[]> = {}
+    const noEvc: LiveDiamond[] = []
+    for (const d of liveDiamonds) {
+      if (d.evc) {
+        if (!groups[d.evc]) groups[d.evc] = []
+        groups[d.evc].push(d)
+      } else {
+        noEvc.push(d)
+      }
+    }
+    // Sort EVC groups by count descending
+    const sorted = Object.entries(groups).sort((a, b) => b[1].length - a[1].length)
+    if (noEvc.length > 0) sorted.push(["Unclassified", noEvc])
+    return sorted
+  }, [liveDiamonds])
 
   // Compute summary stats from live data
   const liveSummary = caratSummaries.map(carat => {
@@ -64,13 +129,7 @@ export default function DiamondPricesPage() {
     if (nearby.length === 0) return null
     const prices = nearby.map(d => d.price).sort((a, b) => a - b)
     const avg = prices.reduce((a, b) => a + b, 0) / prices.length
-    return {
-      carat,
-      avgPrice: Math.round(avg),
-      minPrice: prices[0],
-      maxPrice: prices[prices.length - 1],
-      count: nearby.length,
-    }
+    return { carat, avgPrice: Math.round(avg), minPrice: prices[0], maxPrice: prices[prices.length - 1], count: nearby.length }
   })
 
   // Fallback to placeholder data
@@ -127,6 +186,35 @@ export default function DiamondPricesPage() {
         })}
       </div>
 
+      {/* EVC Band Filters — Section 4.4 */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Filter by value class:</span>
+        <div className="flex gap-1">
+          {COLOR_BANDS.map(b => (
+            <button key={b.value} onClick={() => setColorBand(b.value)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: colorBand === b.value ? "var(--accent-primary)" : "var(--background-alt)",
+                color: colorBand === b.value ? "#fff" : "var(--text-secondary)",
+              }}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1">
+          {CLARITY_BANDS.map(b => (
+            <button key={b.value} onClick={() => setClarityBand(b.value)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: clarityBand === b.value ? "var(--accent-primary)" : "var(--background-alt)",
+                color: clarityBand === b.value ? "#fff" : "var(--text-secondary)",
+              }}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Price Summary Cards */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {caratSummaries.map((carat, i) => {
@@ -173,23 +261,49 @@ export default function DiamondPricesPage() {
         })}
       </div>
 
-      {/* Timeframe selector */}
+      {/* View mode toggle + heading */}
       <div className="mt-8 flex items-center justify-between">
         <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
           {isLiveData ? "Live Inventory" : "Price Index"}
         </h2>
-        <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--background-alt)" }}>
-          {["1M","3M","6M","1Y"].map(tf => (
-            <button key={tf} onClick={() => setTimeframe(tf)}
-              className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                background: timeframe === tf ? "#fff" : "transparent",
-                color: timeframe === tf ? "var(--text-primary)" : "var(--text-secondary)",
-                boxShadow: timeframe === tf ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
-              }}>
-              {tf}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          {isLiveData && (
+            <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--background-alt)" }}>
+              <button onClick={() => setViewMode("grouped")}
+                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                style={{
+                  background: viewMode === "grouped" ? "#fff" : "transparent",
+                  color: viewMode === "grouped" ? "var(--text-primary)" : "var(--text-secondary)",
+                  boxShadow: viewMode === "grouped" ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                }}>
+                <Layers className="h-3 w-3" /> By Value Class
+              </button>
+              <button onClick={() => setViewMode("list")}
+                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                style={{
+                  background: viewMode === "list" ? "#fff" : "transparent",
+                  color: viewMode === "list" ? "var(--text-primary)" : "var(--text-secondary)",
+                  boxShadow: viewMode === "list" ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                }}>
+                <List className="h-3 w-3" /> All
+              </button>
+            </div>
+          )}
+          {!isLiveData && (
+            <div className="flex gap-1 rounded-lg p-1" style={{ background: "var(--background-alt)" }}>
+              {["1M","3M","6M","1Y"].map(tf => (
+                <button key={tf} onClick={() => setTimeframe(tf)}
+                  className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    background: timeframe === tf ? "#fff" : "transparent",
+                    color: timeframe === tf ? "var(--text-primary)" : "var(--text-secondary)",
+                    boxShadow: timeframe === tf ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                  }}>
+                  {tf}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -203,8 +317,63 @@ export default function DiamondPricesPage() {
         </Card>
       )}
 
-      {/* LIVE: Diamond inventory table */}
-      {!loading && isLiveData && liveDiamonds.length > 0 && (
+      {/* LIVE: Grouped by EVC */}
+      {!loading && isLiveData && viewMode === "grouped" && groupedByEVC.length > 0 && (
+        <div className="mt-4 space-y-6">
+          {groupedByEVC.map(([evc, diamonds]) => {
+            const stats = evc !== "Unclassified" ? evcGroups[evc] : null
+            return (
+              <div key={evc}>
+                {/* EVC Group Header — Section 4.4: "Comparing within value class" */}
+                <div className="flex flex-wrap items-center gap-3 rounded-lg px-4 py-3" style={{ background: "var(--background-alt)", border: "1px solid var(--border)" }}>
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4" style={{ color: "var(--accent-primary)" }} />
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                      {evc === "Unclassified" ? "Insufficient data for value class" : "Comparing within value class"}
+                    </span>
+                  </div>
+                  {evc !== "Unclassified" && (
+                    <span className="rounded-md px-2 py-1 font-mono text-xs font-semibold" style={{ background: "#fff", color: "var(--accent-primary)", border: "1px solid var(--border)" }}>
+                      {evc}
+                    </span>
+                  )}
+                  {stats && (
+                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {stats.count} {stats.count === 1 ? "stone" : "stones"} &middot; avg {formatPrice(stats.avgPrice)} &middot; range {formatPrice(stats.minPrice)}–{formatPrice(stats.maxPrice)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Diamonds in this EVC */}
+                <Card className="mt-2">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                          <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Diamond</th>
+                          <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Specs</th>
+                          <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Price (AUD)</th>
+                          <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>$/ct</th>
+                          <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Retailer</th>
+                          <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Quality</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {diamonds.map(d => (
+                          <DiamondRow key={d.id} d={d} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* LIVE: Flat list view */}
+      {!loading && isLiveData && viewMode === "list" && liveDiamonds.length > 0 && (
         <Card className="mt-4">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -212,42 +381,31 @@ export default function DiamondPricesPage() {
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
                   <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Diamond</th>
                   <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Specs</th>
+                  <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>EVC</th>
                   <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Price (AUD)</th>
                   <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>$/ct</th>
                   <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Retailer</th>
+                  <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Quality</th>
                 </tr>
               </thead>
               <tbody>
                 {liveDiamonds.map(d => (
-                  <tr key={d.id} className="transition-colors hover:bg-[var(--background-alt)]" style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td className="px-4 py-3">
-                      <a href={d.product_url} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline" style={{ color: "var(--accent-primary)" }}>
-                        {d.carat}ct {d.shape ? d.shape.charAt(0).toUpperCase() + d.shape.slice(1) : ""} {d.color || ""} {d.clarity || ""}
-                      </a>
-                      {d.cert_lab && (
-                        <span className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#EFF6FF", color: "var(--accent-secondary)" }}>
-                          {d.cert_lab}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
-                      {d.metal && <span>{d.metal} &middot; </span>}
-                      {d.origin === "lab_grown" ? "Lab" : "Natural"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
-                      {formatPrice(d.price)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
-                      {formatPrice(Math.round(d.price / d.carat))}
-                    </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
-                      {d.retailer_name}
-                    </td>
-                  </tr>
+                  <DiamondRow key={d.id} d={d} showEvc />
                 ))}
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
+
+      {/* LIVE: No results */}
+      {!loading && isLiveData && liveDiamonds.length === 0 && (
+        <Card className="mt-4">
+          <CardContent className="p-8 text-center">
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              No diamonds match these filters. Try broadening the colour or clarity range.
+            </p>
+          </CardContent>
         </Card>
       )}
 
@@ -308,6 +466,72 @@ export default function DiamondPricesPage() {
           </p>
         </>
       )}
+
+      {/* Disclaimer */}
+      {isLiveData && (
+        <p className="mt-6 text-center text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+          Prices sourced from publicly listed Australian retailer data. Diamonds are grouped by Equivalent Value Class (EVC) for
+          like-for-like comparison. Individual retailer pricing may vary. All prices in AUD inc. GST.
+        </p>
+      )}
     </div>
+  )
+}
+
+// ─── Diamond Table Row ───
+
+function DiamondRow({ d, showEvc }: { d: LiveDiamond; showEvc?: boolean }) {
+  return (
+    <tr className="transition-colors hover:bg-[var(--background-alt)]" style={{ borderBottom: "1px solid var(--border)" }}>
+      <td className="px-4 py-3">
+        <a href={d.product_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium hover:underline" style={{ color: "var(--accent-primary)" }}>
+          {d.carat}ct {d.shape ? d.shape.charAt(0).toUpperCase() + d.shape.slice(1) : ""} {d.color || ""} {d.clarity || ""}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+        {d.cert_lab && (
+          <span className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: "#EFF6FF", color: "var(--accent-secondary)" }}>
+            {d.cert_lab}
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+        {d.cut && <span>{d.cut} cut &middot; </span>}
+        {d.metal && <span>{d.metal} &middot; </span>}
+        {d.setting_style && <span>{d.setting_style} &middot; </span>}
+        {d.origin === "lab_grown" ? "Lab" : "Natural"}
+      </td>
+      {showEvc && (
+        <td className="px-4 py-3">
+          {d.evc ? (
+            <span className="rounded-md px-1.5 py-0.5 font-mono text-[10px]" style={{ background: "var(--background-alt)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+              {d.evc}
+            </span>
+          ) : (
+            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>—</span>
+          )}
+        </td>
+      )}
+      <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+        {formatPrice(d.price)}
+      </td>
+      <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+        {formatPrice(Math.round(d.price / d.carat))}
+      </td>
+      <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+        {d.retailer_name}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          <div className="h-1.5 w-10 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+            <div className="h-full rounded-full" style={{
+              width: `${d.data_quality_score}%`,
+              background: d.data_quality_score >= 70 ? "var(--accent-success)" :
+                          d.data_quality_score >= 50 ? "var(--accent-warning)" : "var(--accent-danger)",
+            }} />
+          </div>
+          <span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>{d.data_quality_score}</span>
+        </div>
+      </td>
+    </tr>
   )
 }

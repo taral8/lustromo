@@ -27,6 +27,56 @@ const RETAILER_TIMEOUT_MS = 30000
 
 function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)) }
 
+// Fetch live gold spot price from DB or API
+async function fetchSpotPrice(): Promise<number> {
+  // Try DB first (most recent price within 4 hours)
+  const { data } = await supabase
+    .from("gold_prices")
+    .select("price_per_gram, recorded_at")
+    .eq("locale", "au")
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .single()
+  if (data?.price_per_gram && Number(data.price_per_gram) > 100) {
+    const age = Date.now() - new Date(data.recorded_at).getTime()
+    if (age < 4 * 60 * 60 * 1000) {
+      console.log(`  Using spot price from DB: $${Number(data.price_per_gram).toFixed(2)}/gram`)
+      return Number(data.price_per_gram)
+    }
+  }
+  // Try gold-api.com (free)
+  try {
+    const res = await fetch("https://api.gold-api.com/price/XAU", {
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.ok) {
+      const d = await res.json()
+      if (d?.price && d.price > 0) {
+        // USD per oz — convert to AUD per gram
+        let usdToAud = d?.exchangeRates?.AUD
+        if (!usdToAud) {
+          const fxRes = await fetch("https://api.frankfurter.app/latest?from=USD&to=AUD", {
+            signal: AbortSignal.timeout(8000),
+          })
+          if (fxRes.ok) { usdToAud = (await fxRes.json())?.rates?.AUD }
+        }
+        if (usdToAud && usdToAud > 0) {
+          const perGram = (d.price * usdToAud) / 31.1035
+          console.log(`  Using spot price from gold-api.com: $${perGram.toFixed(2)}/gram`)
+          return perGram
+        }
+      }
+    }
+  } catch { /* fall through */ }
+  // Fallback to DB regardless of age
+  if (data?.price_per_gram && Number(data.price_per_gram) > 100) {
+    console.log(`  Using stale spot price from DB: $${Number(data.price_per_gram).toFixed(2)}/gram`)
+    return Number(data.price_per_gram)
+  }
+  console.log(`  Using default spot price: $210.00/gram`)
+  return 210.0
+}
+
 // ─── Fetch with progress logging ───
 
 async function fetchShopifyProducts(baseUrl: string, retailerName: string): Promise<ShopifyProduct[]> {
@@ -58,7 +108,7 @@ async function fetchShopifyProducts(baseUrl: string, retailerName: string): Prom
 
 // ─── Gold ingestion with progress ───
 
-async function scrapeGold(config: RetailerConfig): Promise<number> {
+async function scrapeGold(config: RetailerConfig, spotPrice: number): Promise<number> {
   if (!config.categories.includes("gold")) { console.log(`  [${config.name}] Skipping gold (not in categories)`); return 0 }
 
   console.log(`  [${config.name}] Running gold scraper...`)
@@ -75,6 +125,7 @@ async function scrapeGold(config: RetailerConfig): Promise<number> {
       price_aud: p.price_aud, karat: p.karat, weight_grams: p.weight_grams,
       product_type: p.product_type, product_title: p.product_title,
       has_diamonds: p.has_diamonds, has_gemstones: p.has_gemstones,
+      spot_price_24k: spotPrice,
     })
 
     const { error } = await supabase.from("gold_products").upsert({
@@ -155,7 +206,7 @@ async function hasExistingData(config: RetailerConfig): Promise<boolean> {
 
 // ─── Scrape a single retailer ───
 
-async function scrapeRetailer(config: RetailerConfig, force: boolean): Promise<{ gold: number; diamonds: number; status: string }> {
+async function scrapeRetailer(config: RetailerConfig, force: boolean, spotPrice: number): Promise<{ gold: number; diamonds: number; status: string }> {
   console.log(`\n${"─".repeat(50)}`)
   console.log(`${config.name} (${config.baseUrl})`)
   console.log(`Categories: ${config.categories.join(", ")}`)
@@ -196,7 +247,7 @@ async function scrapeRetailer(config: RetailerConfig, force: boolean): Promise<{
   console.log(`  [${config.name}] Total products: ${shopifyProducts.length}`)
 
   // Scrape gold
-  const goldCount = await scrapeGold(config)
+  const goldCount = await scrapeGold(config, spotPrice)
 
   // Scrape diamonds
   const diamondCount = await scrapeDiamonds(config, shopifyProducts)
@@ -223,6 +274,10 @@ async function main() {
 
   const allRetailers = getActiveRetailers()
 
+  // Fetch spot price once for the entire run
+  console.log(`\nFetching live gold spot price...`)
+  const spotPrice = await fetchSpotPrice()
+
   if (retailerArg) {
     // Single retailer mode
     const config = allRetailers.find(r => r.baseUrl.includes(retailerArg))
@@ -231,7 +286,7 @@ async function main() {
       console.log("Available:", allRetailers.map(r => r.baseUrl).join(", "))
       process.exit(1)
     }
-    await scrapeRetailer(config, force)
+    await scrapeRetailer(config, force, spotPrice)
   } else {
     // All retailers mode
     console.log(`\nLustrumo Master Scraper — ${allRetailers.length} active retailers`)
@@ -248,7 +303,7 @@ async function main() {
       }
 
       console.log(`\n[${i + 1}/${allRetailers.length}]`)
-      const result = await scrapeRetailer(allRetailers[i], force)
+      const result = await scrapeRetailer(allRetailers[i], force, spotPrice)
       totalGold += result.gold
       totalDiamonds += result.diamonds
       results.push({ name: allRetailers[i].name, ...result })

@@ -5,6 +5,7 @@ import { scrapeGoldProducts } from "@/lib/scrapers/gold-scraper"
 import { valuateGoldProduct } from "@/lib/valuation/gold-valuation"
 import { normaliseShopifyProduct, ingestProducts } from "@/lib/ingestion/pipeline"
 import { type ShopifyProduct } from "@/lib/ingestion/types"
+import { getSpotPricePerGram } from "@/lib/gold-spot-price"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -78,7 +79,8 @@ async function fetchAllProducts(baseUrl: string): Promise<ShopifyProduct[]> {
  */
 async function scrapeAndIngestGold(
   config: RetailerConfig,
-  supabase: ReturnType<typeof createServiceClient>
+  supabase: ReturnType<typeof createServiceClient>,
+  spotPrice: number
 ): Promise<number> {
   if (!supabase || !config.categories.includes("gold")) return 0
 
@@ -95,6 +97,7 @@ async function scrapeAndIngestGold(
       product_title: p.product_title,
       has_diamonds: p.has_diamonds,
       has_gemstones: p.has_gemstones,
+      spot_price_24k: spotPrice,
     })
 
     const { error } = await supabase.from("gold_products").upsert({
@@ -185,6 +188,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 })
   }
 
+  // Fetch live spot price once for all retailers
+  const spotPrice = await getSpotPricePerGram()
+
   const activeRetailers = getActiveRetailers()
   const results: RetailerResult[] = []
   let totalGold = 0
@@ -222,7 +228,7 @@ export async function POST(request: NextRequest) {
       const shopifyProducts = await fetchAllProducts(config.baseUrl)
 
       // Scrape gold products (uses its own fetch internally for gold-specific parsing)
-      const goldCount = await scrapeAndIngestGold(config, supabase)
+      const goldCount = await scrapeAndIngestGold(config, supabase, spotPrice)
 
       // Scrape diamonds from the already-fetched products
       const diamondCount = await scrapeAndIngestDiamonds(config, shopifyProducts, supabase)

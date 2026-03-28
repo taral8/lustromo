@@ -26,8 +26,8 @@ export interface GoldValuationResult {
 
 // ─── Constants ───
 
-// Default 24K gold spot price AUD per gram (placeholder — replaced by live feed)
-const DEFAULT_SPOT_PRICE_24K = 135.20
+// Default 24K gold spot price AUD per gram (fallback — callers should pass live price)
+const DEFAULT_SPOT_PRICE_24K = 210.0
 
 // Karat purity fractions (equivalent to karat/24)
 const KARAT_PURITY: Record<number, number> = {

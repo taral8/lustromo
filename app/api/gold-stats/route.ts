@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase"
+import { getSpotPricePerGram } from "@/lib/gold-spot-price"
 
 export const dynamic = "force-dynamic"
+
+const KARAT_PURITY: Record<number, number> = {
+  9: 0.375, 14: 0.5833, 18: 0.75, 22: 0.9167, 24: 0.9999,
+}
 
 /**
  * GET /api/gold-stats
  *
- * Returns aggregate making charge statistics from the gold_products table:
- * - Overall average making charge
- * - Breakdown by product type (avg, count, min, max)
- * - Breakdown by karat
- * - Distribution histogram (buckets of 10%)
+ * Returns aggregate making charge statistics from the gold_products table.
+ * Making charges are recalculated dynamically using the live spot price,
+ * not the stale values stored at scrape time.
  */
 export async function GET() {
   const supabase = createServiceClient()
@@ -18,32 +21,80 @@ export async function GET() {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 })
   }
 
-  // Fetch all gold products with valid making charge data
-  const { data, error } = await supabase
-    .from("gold_products")
-    .select("product_type, karat, making_charge_pct, making_charge_rating, has_diamonds, has_gemstones")
-    .eq("locale", "au")
-    .gt("price_local", 0)
-    .not("making_charge_pct", "is", null)
+  // Fetch live spot price
+  const spotPerGram = await getSpotPricePerGram()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  // Fetch all gold products with the fields needed for recalculation
+  // Paginate past the 1,000 row Supabase default
+  const allData: {
+    product_type: string | null
+    karat: number | null
+    weight_grams: number | null
+    price_local: number
+    has_diamonds: boolean
+    has_gemstones: boolean
+  }[] = []
+
+  let offset = 0
+  while (true) {
+    const { data } = await supabase
+      .from("gold_products")
+      .select("product_type, karat, weight_grams, price_local, has_diamonds, has_gemstones")
+      .eq("locale", "au")
+      .gt("price_local", 0)
+      .not("karat", "is", null)
+      .range(offset, offset + 999)
+
+    if (!data || data.length === 0) break
+    allData.push(...data)
+    if (data.length < 1000) break
+    offset += 1000
   }
 
-  if (!data || data.length === 0) {
-    return NextResponse.json({ total: 0, byType: [], byKarat: [], distribution: [] })
+  if (allData.length === 0) {
+    return NextResponse.json({ total: 0, byType: [], byKarat: [], distribution: [], spotPricePerGram: spotPerGram })
+  }
+
+  // Recalculate making charges dynamically
+  const recalculated: {
+    product_type: string
+    karat: number
+    making_charge_pct: number
+    has_diamonds: boolean
+    has_gemstones: boolean
+  }[] = []
+
+  for (const d of allData) {
+    if (!d.karat || !KARAT_PURITY[d.karat]) continue
+    if (!d.weight_grams || d.weight_grams <= 0) continue
+
+    const intrinsic = d.weight_grams * KARAT_PURITY[d.karat] * spotPerGram
+    if (intrinsic <= 0) continue
+
+    const makingChargePct = ((d.price_local / intrinsic) - 1) * 100
+
+    recalculated.push({
+      product_type: d.product_type || "unknown",
+      karat: d.karat,
+      making_charge_pct: makingChargePct,
+      has_diamonds: d.has_diamonds,
+      has_gemstones: d.has_gemstones,
+    })
+  }
+
+  if (recalculated.length === 0) {
+    return NextResponse.json({ total: 0, byType: [], byKarat: [], distribution: [], spotPricePerGram: spotPerGram })
   }
 
   // Overall stats
-  const allCharges = data.map(d => Number(d.making_charge_pct))
+  const allCharges = recalculated.map(d => d.making_charge_pct)
   const overallAvg = allCharges.reduce((a, b) => a + b, 0) / allCharges.length
 
   // By product type
   const typeMap: Record<string, number[]> = {}
-  for (const d of data) {
-    const t = d.product_type || "unknown"
-    if (!typeMap[t]) typeMap[t] = []
-    typeMap[t].push(Number(d.making_charge_pct))
+  for (const d of recalculated) {
+    if (!typeMap[d.product_type]) typeMap[d.product_type] = []
+    typeMap[d.product_type].push(d.making_charge_pct)
   }
 
   const byType = Object.entries(typeMap)
@@ -58,10 +109,9 @@ export async function GET() {
 
   // By karat
   const karatMap: Record<number, number[]> = {}
-  for (const d of data) {
-    if (!d.karat) continue
+  for (const d of recalculated) {
     if (!karatMap[d.karat]) karatMap[d.karat] = []
-    karatMap[d.karat].push(Number(d.making_charge_pct))
+    karatMap[d.karat].push(d.making_charge_pct)
   }
 
   const byKarat = Object.entries(karatMap)
@@ -72,8 +122,7 @@ export async function GET() {
     }))
     .sort((a, b) => a.karat - b.karat)
 
-  // Distribution histogram (buckets of 10%)
-  // Cap at 200% for display purposes
+  // Distribution histogram
   const buckets = [
     { label: "0–10%", min: -Infinity, max: 10, count: 0 },
     { label: "10–20%", min: 10, max: 20, count: 0 },
@@ -94,19 +143,21 @@ export async function GET() {
   }
 
   // Pure gold only stats (no diamonds/gemstones)
-  const pureGold = data.filter(d => !d.has_diamonds && !d.has_gemstones)
-  const pureGoldCharges = pureGold.map(d => Number(d.making_charge_pct))
+  const pureGoldCharges = recalculated
+    .filter(d => !d.has_diamonds && !d.has_gemstones)
+    .map(d => d.making_charge_pct)
   const pureGoldAvg = pureGoldCharges.length > 0
     ? pureGoldCharges.reduce((a, b) => a + b, 0) / pureGoldCharges.length
     : null
 
   return NextResponse.json({
-    total: data.length,
+    total: recalculated.length,
     overallAvg: Math.round(overallAvg * 10) / 10,
     pureGoldAvg: pureGoldAvg !== null ? Math.round(pureGoldAvg * 10) / 10 : null,
-    pureGoldCount: pureGold.length,
+    pureGoldCount: pureGoldCharges.length,
     byType,
     byKarat,
     distribution: buckets,
+    spotPricePerGram: spotPerGram,
   })
 }

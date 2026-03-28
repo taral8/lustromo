@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase"
+import { getGoldSpotPrice } from "@/lib/gold-spot-price"
 
 export const dynamic = "force-dynamic"
-
-const TROY_OUNCE_GRAMS = 31.1035
 
 /**
  * GET /api/cron/gold
  *
  * Vercel Cron Job — refreshes gold spot price and stores in gold_prices table.
+ * Uses the shared gold-spot-price utility (gold-api.com → goldpricez.com → scrape).
  * Protected by CRON_SECRET header.
  */
 export async function GET(request: NextRequest) {
@@ -43,71 +43,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Try goldapi.io
-  let result: { perGram: number; perOunce: number; source: string } | null = null
+  // Fetch via shared utility (handles caching + persistence internally)
+  const spot = await getGoldSpotPrice()
 
-  const goldApiKey = process.env.GOLD_API_KEY
-  if (goldApiKey) {
-    try {
-      const res = await fetch("https://www.goldapi.io/api/XAU/AUD", {
-        headers: { "x-access-token": goldApiKey },
-        signal: AbortSignal.timeout(10000),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data?.price_gram_24k > 0) {
-          result = {
-            perGram: data.price_gram_24k,
-            perOunce: data.price || data.price_gram_24k * TROY_OUNCE_GRAMS,
-            source: "goldapi.io",
-          }
-        }
-      }
-    } catch { /* fall through */ }
-  }
-
-  // Try metals.dev
-  if (!result) {
-    try {
-      const key = process.env.METALS_DEV_API_KEY || "demo"
-      const res = await fetch(`https://api.metals.dev/v1/latest?api_key=${key}&currency=AUD&unit=gram`, {
-        signal: AbortSignal.timeout(10000),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data?.metals?.gold > 0) {
-          result = {
-            perGram: data.metals.gold,
-            perOunce: data.metals.gold * TROY_OUNCE_GRAMS,
-            source: "metals.dev",
-          }
-        }
-      }
-    } catch { /* fall through */ }
-  }
-
-  if (!result) {
+  if (spot.source === "fallback") {
     return NextResponse.json({ error: "All gold price APIs failed" }, { status: 502 })
-  }
-
-  // Store in gold_prices
-  const { error } = await supabase.from("gold_prices").insert({
-    locale: "au",
-    currency: "AUD",
-    price_per_gram: Math.round(result.perGram * 100) / 100,
-    price_per_ounce: Math.round(result.perOunce * 100) / 100,
-    source: result.source,
-  })
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({
     stored: true,
-    pricePerGram: Math.round(result.perGram * 100) / 100,
-    pricePerOunce: Math.round(result.perOunce * 100) / 100,
-    source: result.source,
-    timestamp: new Date().toISOString(),
+    pricePerGram: spot.pricePerGram,
+    pricePerOunce: spot.pricePerOunce,
+    source: spot.source,
+    isFresh: spot.isFresh,
+    timestamp: spot.timestamp,
   })
 }

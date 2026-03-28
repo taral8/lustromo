@@ -3,6 +3,7 @@ import { valuateGoldProduct, type GoldValuationResult } from "@/lib/valuation/go
 import { valuateNaturalDiamond, type NaturalDiamondValuation } from "@/lib/valuation/natural-diamond-valuation"
 import { type GoldProductType } from "@/lib/scrapers/gold-scraper"
 import { createServiceClient } from "@/lib/supabase"
+import { getSpotPricePerGram } from "@/lib/gold-spot-price"
 
 export interface GoldDealResult {
   valuation: GoldValuationResult
@@ -328,6 +329,7 @@ export async function POST(request: NextRequest) {
       const hasDiamonds = /\bdiamond\b/i.test((name || "") + " " + html.substring(0, 10000))
       const hasGemstones = /\b(?:ruby|sapphire|emerald|opal|topaz|amethyst|garnet|pearl)\b/i.test((name || "") + " " + html.substring(0, 10000))
 
+      const spotPrice = await getSpotPricePerGram()
       const valuation = valuateGoldProduct({
         price_aud: price,
         karat: karatNum,
@@ -336,6 +338,7 @@ export async function POST(request: NextRequest) {
         product_title: name || "",
         has_diamonds: hasDiamonds,
         has_gemstones: hasGemstones,
+        spot_price_24k: spotPrice,
       })
 
       if (valuation) {

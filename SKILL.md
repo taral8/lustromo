@@ -601,7 +601,7 @@ Phase 5            → Valuation API — productise the engine
 - GIA 4Cs grading: https://www.gia.edu/4cs
 - IGI certificate lookup: https://www.igi.org/verify-your-report
 - GIA certificate lookup: https://www.gia.edu/report-check
-- Gold spot price (AUD): use live feed — do not hardcode
+- Gold spot price (AUD): GoldAPI.io — https://goldapi.io | Endpoint: GET /api/XAU/AUD/{date} | Returns price_gram_22K and price_gram_18K natively | Data sourced from FOREX and LBMA | Pair with USD/AUD forex feed for real-time conversion | Use paid plan for historical data (required for price trend moat)
 - Rapaport price list: weekly update required for natural diamond pricing
 - IDEX: lab-grown diamond price index
 

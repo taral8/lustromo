@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase"
 import { scrapeGoldProducts } from "@/lib/scrapers/gold-scraper"
 import { valuateGoldProduct } from "@/lib/valuation/gold-valuation"
+import { getSpotPricePerGram } from "@/lib/gold-spot-price"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -37,6 +38,9 @@ export async function POST(request: NextRequest) {
   const url = body.url || "https://rbdiamond.com.au"
   const retailerName = body.retailer_name || "RB Diamond"
 
+  // Fetch live spot price for valuation
+  const spotPrice = await getSpotPricePerGram()
+
   // Scrape
   const { total, goldCount, products } = await scrapeGoldProducts(url, retailerName)
 
@@ -55,6 +59,7 @@ export async function POST(request: NextRequest) {
       product_title: p.product_title,
       has_diamonds: p.has_diamonds,
       has_gemstones: p.has_gemstones,
+      spot_price_24k: spotPrice,
     })
 
     const row = {

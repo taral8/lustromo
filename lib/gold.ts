@@ -14,10 +14,10 @@ export const makingCharges = [
 ]
 
 export const placeholderGoldSpot = {
-  pricePerGram: 135.20,
-  pricePerOunce: 4205.50,
-  change24h: 1.40,
-  changePercent24h: 1.05,
+  pricePerGram: 210.0,
+  pricePerOunce: 6531.74,
+  change24h: 0,
+  changePercent24h: 0,
 }
 
 export function calculateMeltValue(weightGrams: number, karat: string, spotPricePerGram: number): number {

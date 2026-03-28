@@ -16,6 +16,7 @@ interface GoldPrice {
   currency: string
   source: string
   timestamp: string
+  isFresh: boolean
   change24h: number | null
   changePercent24h: number | null
 }
@@ -86,10 +87,25 @@ export default function GoldPricesPage() {
     }).catch(() => setLoading(false))
   }, [])
 
-  const spot = goldPrice?.pricePerGram ?? 135.20
-  const isLive = goldPrice?.source !== "fallback" && goldPrice?.source !== undefined
+  const spot = goldPrice?.pricePerGram ?? 210.0
+  const isFresh = goldPrice?.isFresh ?? false
+  const isStale = goldPrice != null && !isFresh
   const change = goldPrice?.change24h ?? null
   const changePct = goldPrice?.changePercent24h ?? null
+
+  // Calculate "X minutes ago" from timestamp
+  const lastUpdatedText = goldPrice?.timestamp
+    ? (() => {
+        const diffMs = Date.now() - new Date(goldPrice.timestamp).getTime()
+        const mins = Math.floor(diffMs / 60000)
+        if (mins < 1) return "Just now"
+        if (mins < 60) return `${mins} min${mins > 1 ? "s" : ""} ago`
+        const hrs = Math.floor(mins / 60)
+        if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`
+        const days = Math.floor(hrs / 24)
+        return `${days} day${days > 1 ? "s" : ""} ago`
+      })()
+    : null
 
   // Sparkline placeholders (trending upward for gold)
   const karatCards = [9, 14, 18, 22, 24].map(k => {
@@ -163,12 +179,20 @@ export default function GoldPricesPage() {
                   </span>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                {isLive && (
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: "#10B981" }}>LIVE</span>
-                )}
-                <span className="text-[10px]" style={{ color: "rgba(241,245,249,0.3)" }}>
-                  {goldPrice?.source} &middot; {goldPrice?.timestamp ? new Date(goldPrice.timestamp).toLocaleString("en-AU") : "—"}
+              <div className="mt-3 flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2">
+                  {isFresh ? (
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: "#10B981" }}>LIVE</span>
+                  ) : (
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: "#F59E0B" }}>CACHED</span>
+                  )}
+                  <span className="text-[10px]" style={{ color: "rgba(241,245,249,0.3)" }}>
+                    {goldPrice?.source}
+                  </span>
+                </div>
+                <span className="text-[10px]" style={{ color: isStale ? "#F59E0B" : "rgba(241,245,249,0.3)" }}>
+                  {lastUpdatedText ? `Last updated: ${lastUpdatedText}` : "—"}
+                  {isStale && " — live feed temporarily unavailable"}
                 </span>
               </div>
             </div>

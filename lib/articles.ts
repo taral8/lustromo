@@ -4,6 +4,7 @@ export interface Article {
   excerpt: string
   category: string
   readTime: string
+  featured?: boolean   // cornerstone articles shown first
   content?: ArticleSection[]
 }
 
@@ -13,6 +14,32 @@ export interface ArticleSection {
 }
 
 export const articles: Article[] = [
+  // ─── Cornerstone SEO articles (dedicated page routes) ───
+  {
+    slug: "lab-grown-diamonds-guide",
+    title: "Lab-Grown Diamonds: The Complete 2026 Guide",
+    excerpt: "Current prices, CVD vs HPHT, IGI vs GIA certification, resale value, and how to check if you're getting a fair price. Based on 9,400+ products from Australian retailers.",
+    category: "Lab-Grown Diamonds",
+    readTime: "12 min",
+    featured: true,
+  },
+  {
+    slug: "gold-making-charges",
+    title: "Gold Making Charges Explained: What's Fair in Australia?",
+    excerpt: "Making charges range from 15% to over 50%. Learn what's normal for rings, chains, bangles and necklaces using data from 6,600+ Australian gold products.",
+    category: "Gold Buying",
+    readTime: "8 min",
+    featured: true,
+  },
+  {
+    slug: "diamond-certificate-verification",
+    title: "How to Verify a Diamond Certificate (IGI & GIA)",
+    excerpt: "Step-by-step guide to verifying IGI and GIA certificates online. Check if your diamond's grading is legitimate and matches what the retailer claims.",
+    category: "Certification",
+    readTime: "6 min",
+    featured: true,
+  },
+  // ─── Additional articles (dynamic [slug] route) ───
   {
     slug: "lab-grown-diamonds",
     title: "Lab-Grown Diamonds: The Complete 2026 Guide",

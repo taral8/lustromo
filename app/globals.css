@@ -60,6 +60,12 @@
   }
 }
 
+/* ─── Article typography ─── */
+
+.article-content {
+  max-width: 720px;
+}
+
 /* ─── PWA: Safe areas & standalone mode ─── */
 
 /* iOS safe area support */

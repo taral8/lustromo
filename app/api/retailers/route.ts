@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic"
  *
  * Discovers retailers from actual product data (gold_products + products tables),
  * calculates confidence scores, and returns sorted by score descending.
+ * Paginates all queries to handle >1,000 rows (Supabase default limit).
  */
 
 interface RetailerScore {
@@ -36,18 +37,45 @@ export async function GET() {
     return NextResponse.json({ retailers: [] })
   }
 
-  // 1. Get unique retailers from gold_products
-  const { data: goldData } = await supabase
-    .from("gold_products")
-    .select("retailer_name, retailer_url, karat, weight_grams, making_charge_pct, has_diamonds, has_gemstones")
-    .eq("locale", "au")
+  // Paginated fetch — works past the 1,000 row Supabase default
+  const sb = supabase
 
-  // 2. Get unique retailers from products (diamonds)
-  const { data: diamondData } = await supabase
-    .from("products")
-    .select("retailer_id, diamond_centre_type, diamond_centre_carat, diamond_centre_color, diamond_centre_clarity, diamond_centre_cert_number, product_type")
-    .eq("locale", "au")
-    .eq("is_available", true)
+  async function fetchGoldPage(offset: number) {
+    return sb.from("gold_products")
+      .select("retailer_name, retailer_url, karat, weight_grams, making_charge_pct, has_diamonds, has_gemstones")
+      .eq("locale", "au")
+      .range(offset, offset + 999)
+  }
+
+  async function fetchDiamondPage(offset: number) {
+    return sb.from("products")
+      .select("retailer_id, diamond_centre_type, diamond_centre_carat, diamond_centre_color, diamond_centre_clarity, product_type")
+      .eq("locale", "au")
+      .eq("is_available", true)
+      .range(offset, offset + 999)
+  }
+
+  // 1. Fetch ALL gold products
+  const goldData: { retailer_name: string; retailer_url: string | null; karat: number | null; weight_grams: number | null; making_charge_pct: number | null; has_diamonds: boolean; has_gemstones: boolean }[] = []
+  let goldOffset = 0
+  while (true) {
+    const { data } = await fetchGoldPage(goldOffset)
+    if (!data || data.length === 0) break
+    goldData.push(...data)
+    if (data.length < 1000) break
+    goldOffset += 1000
+  }
+
+  // 2. Fetch ALL diamond products
+  const diamondData: { retailer_id: string; diamond_centre_type: string | null; diamond_centre_carat: number | null; diamond_centre_color: string | null; diamond_centre_clarity: string | null; product_type: string | null }[] = []
+  let diamondOffset = 0
+  while (true) {
+    const { data } = await fetchDiamondPage(diamondOffset)
+    if (!data || data.length === 0) break
+    diamondData.push(...data)
+    if (data.length < 1000) break
+    diamondOffset += 1000
+  }
 
   // Build retailer map
   const retailerMap: Record<string, {
@@ -57,34 +85,35 @@ export async function GET() {
   }> = {}
 
   // Process gold products
-  for (const g of goldData || []) {
+  for (const g of goldData) {
     const name = g.retailer_name
     if (!retailerMap[name]) retailerMap[name] = { goldProducts: [], diamondProducts: [], url: g.retailer_url }
-    retailerMap[name].goldProducts!.push(g)
+    retailerMap[name].goldProducts.push(g)
   }
 
-  // Process diamond products — retailer_id is like "rbdiamond_au", need to match to name
-  // Build a retailer_id → name mapping from gold_products (which has both name and url)
+  // Build retailer_id → name mapping from gold_products
   const idToName: Record<string, string> = {}
-  for (const g of goldData || []) {
+  for (const g of goldData) {
     if (g.retailer_url) {
-      const id = g.retailer_url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\.com\.au$|\.com$/, "").replace(/[^a-z0-9]/g, "") + "_au"
+      const id = g.retailer_url.replace(/^https?:\/\//, "").replace(/^www\./, "")
+        .replace(/\.com\.au$|\.com$/, "").replace(/[^a-z0-9]/g, "") + "_au"
       idToName[id] = g.retailer_name
     }
   }
 
-  for (const d of diamondData || []) {
+  // Process diamond products
+  for (const d of diamondData) {
     const name = idToName[d.retailer_id] || d.retailer_id.replace(/_au$/, "").replace(/_/g, " ")
     if (!retailerMap[name]) retailerMap[name] = { goldProducts: [], diamondProducts: [], url: null }
-    retailerMap[name].diamondProducts!.push(d)
+    retailerMap[name].diamondProducts.push(d)
   }
 
-  // Calculate scores for each retailer
+  // Calculate scores
   const retailers: RetailerScore[] = []
 
   for (const [name, data] of Object.entries(retailerMap)) {
-    const goldProds = data.goldProducts || []
-    const diamondProds = data.diamondProducts || []
+    const goldProds = data.goldProducts
+    const diamondProds = data.diamondProducts
     const totalGold = goldProds.length
     const totalDiamonds = diamondProds.length
     const totalProducts = totalGold + totalDiamonds
@@ -94,14 +123,11 @@ export async function GET() {
     // Categories
     const categories: string[] = []
     if (totalGold > 0) categories.push("Gold")
-    const hasNatural = diamondProds.some(d => d.diamond_centre_type === "natural")
-    const hasLabGrown = diamondProds.some(d => d.diamond_centre_type === "lab_grown")
-    const hasEngagement = diamondProds.some(d => d.product_type?.includes("engagement"))
-    if (hasNatural) categories.push("Natural")
-    if (hasLabGrown) categories.push("Lab Grown")
-    if (hasEngagement) categories.push("Engagement")
+    if (diamondProds.some(d => d.diamond_centre_type === "natural")) categories.push("Natural")
+    if (diamondProds.some(d => d.diamond_centre_type === "lab_grown")) categories.push("Lab Grown")
+    if (diamondProds.some(d => d.product_type?.includes("engagement"))) categories.push("Engagement")
 
-    // Average making charge (pure gold only)
+    // Avg making charge (pure gold only)
     const pureGoldCharges = goldProds
       .filter(g => !g.has_diamonds && !g.has_gemstones && g.making_charge_pct != null)
       .map(g => Number(g.making_charge_pct))
@@ -112,50 +138,37 @@ export async function GET() {
     // Confidence score
     let score = 0
 
-    // Data volume (0-60 points)
+    // Data volume (0-60)
     if (totalProducts > 500) score += 60
     else if (totalProducts > 200) score += 50
     else if (totalProducts > 50) score += 35
     else score += 20
 
-    // Data completeness (0-20 points)
-    let completeDiamonds = 0
+    // Data completeness (0-20)
+    let complete = 0
     for (const d of diamondProds) {
-      if (d.diamond_centre_carat && d.diamond_centre_color && d.diamond_centre_clarity) completeDiamonds++
+      if (d.diamond_centre_carat && d.diamond_centre_color && d.diamond_centre_clarity) complete++
     }
-    let completeGold = 0
     for (const g of goldProds) {
-      if (g.karat && g.weight_grams) completeGold++
+      if (g.karat && g.weight_grams) complete++
     }
-    const totalCheckable = diamondProds.length + goldProds.length
-    const completeCount = completeDiamonds + completeGold
-    const completenessPct = totalCheckable > 0 ? completeCount / totalCheckable : 0
-    score += Math.round(completenessPct * 20)
+    const total = diamondProds.length + goldProds.length
+    score += total > 0 ? Math.round((complete / total) * 20) : 0
 
-    // Category breadth (0-20 points)
-    const catCount = categories.length
-    if (catCount >= 3) score += 20
-    else if (catCount >= 2) score += 12
+    // Category breadth (0-20)
+    if (categories.length >= 3) score += 20
+    else if (categories.length >= 2) score += 12
     else score += 5
 
     score = Math.min(100, score)
-
     const { tier, tierColor } = getTier(score)
 
     retailers.push({
-      name,
-      totalProducts,
-      totalGold,
-      totalDiamonds,
-      avgMakingCharge,
-      categories,
-      score,
-      tier,
-      tierColor,
+      name, totalProducts, totalGold, totalDiamonds,
+      avgMakingCharge, categories, score, tier, tierColor,
     })
   }
 
-  // Sort by score descending
   retailers.sort((a, b) => b.score - a.score)
 
   return NextResponse.json({ retailers })

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { valuateGoldProduct, type GoldValuationResult } from "@/lib/valuation/gold-valuation"
 import { valuateNaturalDiamond, type NaturalDiamondValuation } from "@/lib/valuation/natural-diamond-valuation"
-import { estimateDiamondPrice } from "@/lib/diamond-data"
 import { type GoldProductType } from "@/lib/scrapers/gold-scraper"
 import { createServiceClient } from "@/lib/supabase"
 
@@ -376,15 +375,12 @@ export async function POST(request: NextRequest) {
         retail_price: price,
       })
       if (natVal && natVal.verdict !== "insufficient_data") {
-        // Lab-grown alternative estimate
-        const labEst = estimateDiamondPrice(caratVal || 1, specs.color || "G", specs.clarity || "VS2", "lab_grown")
-        const savingsPct = natVal.fair_estimate > 0
-          ? Math.round((1 - labEst.fairPrice / natVal.fair_estimate) * 100)
-          : 0
-
         naturalDiamondDeal = {
           valuation: natVal,
-          labGrownAlternative: { fairPrice: labEst.fairPrice, savingsPct },
+          labGrownAlternative: {
+            fairPrice: natVal.lab_grown_equivalent_price,
+            savingsPct: natVal.savings_vs_lab_grown_pct,
+          },
         }
       }
     }

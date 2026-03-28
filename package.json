@@ -11,6 +11,7 @@
     "scrape:all": "tsx scripts/scrape-retailer.ts --all",
     "aggregate": "tsx scripts/aggregate-prices.ts",
     "scrape:diamonds": "tsx scripts/scrape-diamonds-all.ts",
+    "scrape:all-retailers": "tsx scripts/scrape-all-retailers.ts",
     "seed:retailers": "tsx scripts/seed-retailers.ts",
     "gold:refresh": "tsx scripts/refresh-gold-price.ts"
   },

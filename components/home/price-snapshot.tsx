@@ -20,71 +20,84 @@ interface GoldSnapshot {
   karats: Record<number, { avgPricePerGram: number; avgMakingCharge: number; count: number }>
 }
 
-// Diamond cards use placeholder data (will be live once price history builds)
-const diamondCards = [
-  {
-    label: "1ct Lab-Grown Round",
-    price: 1420,
-    change: -3.2,
-    data: [1500, 1490, 1475, 1460, 1445, 1435, 1425, 1420, 1420],
-    href: "/diamond-prices",
-  },
-  {
-    label: "1ct Natural Round",
-    price: 8850,
-    change: -1.8,
-    data: [9010, 8990, 8960, 8940, 8910, 8880, 8860, 8850, 8850],
-    href: "/diamond-prices",
-  },
-]
-
 const KARAT_22_PURITY = 0.916
 const KARAT_18_PURITY = 0.750
+const FALLBACK_LAB_PRICE = 1420
+const FALLBACK_NAT_PRICE = 8850
 
 export function PriceSnapshot({ locale }: PriceSnapshotProps) {
   const prefix = `/${locale}`
   const [goldPrice, setGoldPrice] = useState<GoldPrice | null>(null)
   const [goldSnapshot, setGoldSnapshot] = useState<GoldSnapshot | null>(null)
+  const [labAvg, setLabAvg] = useState<number | null>(null)
+  const [natAvg, setNatAvg] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
       fetch("/api/gold-price").then(r => r.json()).catch(() => null),
       fetch("/api/gold-snapshot").then(r => r.json()).catch(() => null),
-    ]).then(([price, snapshot]) => {
+      fetch("/api/diamonds?origin=lab_grown&shape=round&carat_min=0.7&carat_max=1.3&limit=200").then(r => r.json()).catch(() => null),
+      fetch("/api/diamonds?origin=natural&shape=round&carat_min=0.7&carat_max=1.3&limit=200").then(r => r.json()).catch(() => null),
+    ]).then(([price, snapshot, labData, natData]) => {
       if (price?.pricePerGram) setGoldPrice(price)
       if (snapshot?.karats) setGoldSnapshot(snapshot)
+
+      // Compute average price for ~1ct rounds from DB
+      if (labData?.diamonds?.length > 0) {
+        const prices = labData.diamonds.filter((d: { price: number }) => d.price > 0).map((d: { price: number }) => d.price)
+        if (prices.length > 0) setLabAvg(Math.round(prices.reduce((a: number, b: number) => a + b, 0) / prices.length))
+      }
+      if (natData?.diamonds?.length > 0) {
+        const prices = natData.diamonds.filter((d: { price: number }) => d.price > 0).map((d: { price: number }) => d.price)
+        if (prices.length > 0) setNatAvg(Math.round(prices.reduce((a: number, b: number) => a + b, 0) / prices.length))
+      }
     })
   }, [])
 
-  // Compute gold per gram by karat from 24K spot
+  const labPrice = labAvg ?? FALLBACK_LAB_PRICE
+  const natPrice = natAvg ?? FALLBACK_NAT_PRICE
+  const hasLiveLabData = labAvg !== null
+  const hasLiveNatData = natAvg !== null
+
+  // Gold
   const spot24k = goldPrice?.pricePerGram ?? 148.50
   const gold22kSpot = Math.round(spot24k * KARAT_22_PURITY * 100) / 100
   const gold18kSpot = Math.round(spot24k * KARAT_18_PURITY * 100) / 100
   const goldChange = goldPrice?.changePercent24h ?? null
   const isLiveSpot = goldPrice !== null && goldPrice.source !== "fallback"
 
-  // Use DB avg retail price if available, otherwise fall back to spot-based
   const snap22 = goldSnapshot?.karats?.[22]
   const snap18 = goldSnapshot?.karats?.[18]
-  const hasDbData = !!(snap22 || snap18)
+  const hasDbGold = !!(snap22 || snap18)
 
   const gold22kDisplay = snap22 ? snap22.avgPricePerGram : gold22kSpot
   const gold18kDisplay = snap18 ? snap18.avgPricePerGram : gold18kSpot
 
   // Sparkline placeholders
+  const sparkLab = Array.from({ length: 9 }, (_, i) => Math.round(labPrice * (1.05 - i * 0.004)))
+  const sparkNat = Array.from({ length: 9 }, (_, i) => Math.round(natPrice * (1.01 - i * 0.002)))
   const spark22k = Array.from({ length: 9 }, (_, i) => Math.round((gold22kDisplay * (0.97 + i * 0.003)) * 100) / 100)
   const spark18k = Array.from({ length: 9 }, (_, i) => Math.round((gold18kDisplay * (0.97 + i * 0.003)) * 100) / 100)
 
   const allCards = [
-    ...diamondCards.map(c => ({
-      label: c.label,
-      price: `$${c.price.toLocaleString("en-AU")} AUD`,
+    {
+      label: "1ct Lab-Grown Round",
+      price: `$${labPrice.toLocaleString("en-AU")} AUD`,
       subtitle: null as string | null,
-      change: c.change,
-      data: c.data,
-      href: c.href,
-      isLive: false,
-    })),
+      change: -3.2,
+      data: sparkLab,
+      href: "/diamond-prices",
+      isLive: hasLiveLabData,
+    },
+    {
+      label: "1ct Natural Round",
+      price: `$${natPrice.toLocaleString("en-AU")} AUD`,
+      subtitle: null,
+      change: -1.8,
+      data: sparkNat,
+      href: "/diamond-prices",
+      isLive: hasLiveNatData,
+    },
     {
       label: "22K Gold",
       price: `$${gold22kDisplay.toFixed(2)}/g`,
@@ -92,7 +105,7 @@ export function PriceSnapshot({ locale }: PriceSnapshotProps) {
       change: goldChange,
       data: spark22k,
       href: "/gold-prices",
-      isLive: isLiveSpot || hasDbData,
+      isLive: isLiveSpot || hasDbGold,
     },
     {
       label: "18K Gold",
@@ -101,7 +114,7 @@ export function PriceSnapshot({ locale }: PriceSnapshotProps) {
       change: goldChange,
       data: spark18k,
       href: "/gold-prices",
-      isLive: isLiveSpot || hasDbData,
+      isLive: isLiveSpot || hasDbGold,
     },
   ]
 

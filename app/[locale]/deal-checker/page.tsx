@@ -7,6 +7,19 @@ import { Input } from "@/components/ui/input"
 import { ShieldCheck, Loader2, AlertCircle, ExternalLink, Diamond, Info, Coins } from "lucide-react"
 import { calculateFairValue, comparePrice, type ComparisonResult, type ComparisonStatus } from "@/lib/valuation/engine"
 
+interface NaturalDiamondDealResult {
+  valuation: {
+    fair_estimate: number
+    fair_range: { low: number; high: number }
+    verdict: string
+    verdict_label: string
+    price_diff_pct: number | null
+    shape_multiplier: number
+    base_price_source: string
+  }
+  labGrownAlternative: { fairPrice: number; savingsPct: number }
+}
+
 interface GoldDealResult {
   valuation: {
     estimated_intrinsic_value: number
@@ -63,6 +76,7 @@ export default function DealCheckerPage() {
   const [product, setProduct] = useState<ScrapedProduct | null>(null)
   const [comparison, setComparison] = useState<ComparisonResult | null>(null)
   const [goldDeal, setGoldDeal] = useState<GoldDealResult | null>(null)
+  const [naturalDeal, setNaturalDeal] = useState<NaturalDiamondDealResult | null>(null)
 
   async function handleCheck() {
     if (!url.trim()) return
@@ -71,6 +85,7 @@ export default function DealCheckerPage() {
     setProduct(null)
     setComparison(null)
     setGoldDeal(null)
+    setNaturalDeal(null)
 
     try {
       const res = await fetch("/api/deal-check", {
@@ -89,6 +104,11 @@ export default function DealCheckerPage() {
       // Gold deal result from API
       if (data.goldDeal) {
         setGoldDeal(data.goldDeal)
+      }
+
+      // Natural diamond deal result from API
+      if (data.naturalDiamondDeal) {
+        setNaturalDeal(data.naturalDiamondDeal)
       }
 
       // Run comparison if we have a diamond with a price
@@ -386,6 +406,86 @@ export default function DealCheckerPage() {
               metal weight, or certified stone details — was not available in the retailer&apos;s listing.
               Ask your retailer for a full specification sheet before comparing prices.
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ─── Natural Diamond Valuation Result ─── */}
+      {naturalDeal && product && !loading && (
+        <Card className="mt-6">
+          <CardContent className="p-6">
+            {/* Verdict badge */}
+            <div className="text-center">
+              <div className="mx-auto mb-1 inline-flex items-center gap-2 rounded-full px-5 py-2 text-base font-bold"
+                style={{
+                  background: naturalDeal.valuation.verdict === "below_market" ? "#10B981"
+                    : naturalDeal.valuation.verdict === "fair_price" ? "#3B82F6"
+                    : naturalDeal.valuation.verdict === "above_market" ? "#F59E0B"
+                    : "#EF4444",
+                  color: "#fff",
+                }}>
+                <Diamond className="h-4 w-4" />
+                {naturalDeal.valuation.verdict_label}
+              </div>
+              {naturalDeal.valuation.price_diff_pct !== null && (
+                <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                  This diamond is priced{" "}
+                  <strong className="font-mono" style={{
+                    color: naturalDeal.valuation.price_diff_pct <= 0 ? "var(--accent-success)" : "var(--accent-danger)",
+                  }}>
+                    {Math.abs(naturalDeal.valuation.price_diff_pct).toFixed(1)}% {naturalDeal.valuation.price_diff_pct > 0 ? "above" : "below"}
+                  </strong>{" "}
+                  our fair value estimate.
+                </p>
+              )}
+            </div>
+
+            {/* Breakdown */}
+            <div className="mx-auto mt-6 max-w-sm">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                Fair Value Breakdown
+              </p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--text-secondary)" }}>Retail price</span>
+                  <span className="font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+                    ${product.price?.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--text-secondary)" }}>Fair value estimate</span>
+                  <span className="font-mono font-semibold" style={{ color: "var(--accent-primary)" }}>
+                    ${naturalDeal.valuation.fair_estimate.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--text-muted)" }}>Fair range</span>
+                  <span className="font-mono text-xs" style={{ color: "var(--text-primary)" }}>
+                    ${naturalDeal.valuation.fair_range.low.toLocaleString()} – ${naturalDeal.valuation.fair_range.high.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lab-grown alternative */}
+              <div className="mt-4 rounded-lg p-3" style={{ background: "rgba(240,253,250,0.5)", border: "1px solid rgba(13,148,136,0.15)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--accent-primary)" }}>
+                  Lab-grown alternative
+                </p>
+                <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                  A comparable lab-grown diamond would cost approximately{" "}
+                  <strong className="font-mono" style={{ color: "var(--accent-primary)" }}>
+                    ${naturalDeal.labGrownAlternative.fairPrice.toLocaleString()}
+                  </strong>{" "}
+                  — <strong className="font-mono" style={{ color: "var(--accent-success)" }}>
+                    {naturalDeal.labGrownAlternative.savingsPct}% savings
+                  </strong>.
+                </p>
+              </div>
+
+              <p className="mt-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                {naturalDeal.valuation.base_price_source}
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { valuateGoldProduct, type GoldValuationResult } from "@/lib/valuation/gold-valuation"
+import { valuateNaturalDiamond, type NaturalDiamondValuation } from "@/lib/valuation/natural-diamond-valuation"
+import { estimateDiamondPrice } from "@/lib/diamond-data"
 import { type GoldProductType } from "@/lib/scrapers/gold-scraper"
 import { createServiceClient } from "@/lib/supabase"
 
@@ -7,6 +9,11 @@ export interface GoldDealResult {
   valuation: GoldValuationResult
   productType: GoldProductType
   marketAvg: { avgMakingCharge: number; count: number } | null
+}
+
+export interface NaturalDiamondDealResult {
+  valuation: NaturalDiamondValuation
+  labGrownAlternative: { fairPrice: number; savingsPct: number }
 }
 
 export interface ScrapedProduct {
@@ -357,9 +364,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Natural diamond valuation if diamond product with natural origin
+    let naturalDiamondDeal: NaturalDiamondDealResult | null = null
+    if (productType === "diamond" && specs.origin === "natural" && price) {
+      const caratVal = specs.carat ? parseFloat(specs.carat) : null
+      const natVal = valuateNaturalDiamond({
+        carat: caratVal,
+        color: specs.color,
+        clarity: specs.clarity,
+        shape: specs.shape?.toLowerCase() || null,
+        retail_price: price,
+      })
+      if (natVal && natVal.verdict !== "insufficient_data") {
+        // Lab-grown alternative estimate
+        const labEst = estimateDiamondPrice(caratVal || 1, specs.color || "G", specs.clarity || "VS2", "lab_grown")
+        const savingsPct = natVal.fair_estimate > 0
+          ? Math.round((1 - labEst.fairPrice / natVal.fair_estimate) * 100)
+          : 0
+
+        naturalDiamondDeal = {
+          valuation: natVal,
+          labGrownAlternative: { fairPrice: labEst.fairPrice, savingsPct },
+        }
+      }
+    }
+
     return NextResponse.json({
       name, price, currency: "AUD", image, retailer, url, productType, specs,
       ...(goldDeal ? { goldDeal } : {}),
+      ...(naturalDiamondDeal ? { naturalDiamondDeal } : {}),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"

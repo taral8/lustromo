@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { type DiamondShape, type DiamondOrigin, shapeLabels, estimateDiamondPrice } from "@/lib/diamond-data"
 import { shapeIcons, type DiamondShapeName } from "@/components/tools/diamond-shapes"
+import { valuateNaturalDiamond } from "@/lib/valuation/natural-diamond-valuation"
 
 const shapes: DiamondShape[] = ["round","cushion","oval","princess","emerald","pear","radiant","asscher","marquise","heart"]
 const colorGrades = ["D","E","F","G","H","I","J","K"]
@@ -17,11 +17,22 @@ export default function DiamondCalculatorPage() {
   const [carat, setCarat] = useState(1.0)
   const [color, setColor] = useState("G")
   const [clarity, setClarity] = useState("VS2")
-  const result = estimateDiamondPrice(carat, color, clarity, origin)
-  const altResult = estimateDiamondPrice(carat, color, clarity, origin === "lab_grown" ? "natural" : "lab_grown")
-  const savings = origin === "lab_grown"
-    ? Math.round((1 - result.fairPrice / altResult.fairPrice) * 100)
-    : Math.round((1 - altResult.fairPrice / result.fairPrice) * 100)
+
+  // Lab-grown estimate (existing model)
+  const labResult = estimateDiamondPrice(carat, color, clarity, "lab_grown")
+
+  // Natural estimate (new Phase 3B model)
+  const natVal = valuateNaturalDiamond({ carat, color, clarity, shape, retail_price: null })
+  const natResult = natVal && natVal.fair_estimate > 0
+    ? { fairPrice: natVal.fair_estimate, low: natVal.fair_range.low, high: natVal.fair_range.high }
+    : estimateDiamondPrice(carat, color, clarity, "natural") // fallback
+
+  const result = origin === "lab_grown" ? labResult : natResult
+  const altResult = origin === "lab_grown" ? natResult : labResult
+
+  const savingsPct = origin === "lab_grown"
+    ? Math.round((1 - labResult.fairPrice / natResult.fairPrice) * 100)
+    : Math.round((1 - labResult.fairPrice / natResult.fairPrice) * 100)
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
@@ -118,10 +129,6 @@ export default function DiamondCalculatorPage() {
                 ))}
               </div>
             </div>
-
-            <Button className="w-full py-3 font-semibold">
-              Calculate Fair Price
-            </Button>
           </CardContent>
         </Card>
 
@@ -136,9 +143,6 @@ export default function DiamondCalculatorPage() {
               <div className="mt-2 flex items-center gap-2">
                 <Badge variant="secondary">
                   {shapeLabels[shape]} {carat}ct {color} {clarity} — {origin === "lab_grown" ? "Lab Grown" : "Natural"}
-                </Badge>
-                <Badge variant="outline" style={{ color: "var(--accent-warning)", borderColor: "var(--accent-warning)" }}>
-                  Sample Data
                 </Badge>
               </div>
             </CardContent>
@@ -158,18 +162,39 @@ export default function DiamondCalculatorPage() {
                   ${Math.round(result.fairPrice / carat).toLocaleString()}/ct
                 </span>
               </div>
+              {origin === "natural" && natVal && (
+                <div className="flex justify-between">
+                  <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Shape Adjustment</span>
+                  <span className="font-mono text-sm" style={{ color: "var(--text-secondary)" }}>
+                    {natVal.shape_multiplier}× ({shapeLabels[shape]} vs Round)
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Comparison */}
+          {/* Comparison — lab vs natural */}
           <Card style={{ borderColor: "rgba(16,185,129,0.3)", background: "rgba(240,253,250,0.3)" }}>
             <CardContent className="p-6">
-              <p className="text-sm font-medium" style={{ color: "var(--accent-success)" }}>
-                {origin === "lab_grown"
-                  ? `This is ${savings}% cheaper than a comparable natural diamond ($${altResult.fairPrice.toLocaleString()})`
-                  : `A comparable lab-grown diamond costs ${savings}% less ($${altResult.fairPrice.toLocaleString()})`
-                }
-              </p>
+              {origin === "lab_grown" ? (
+                <p className="text-sm" style={{ color: "var(--accent-success)" }}>
+                  This lab-grown diamond is <strong className="font-mono">{savingsPct}% cheaper</strong> than
+                  a comparable natural diamond (est. <strong className="font-mono">${natResult.fairPrice.toLocaleString()}</strong>).
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                    Lab-grown alternative
+                  </p>
+                  <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                    A comparable lab-grown diamond would cost approximately{" "}
+                    <strong className="font-mono" style={{ color: "var(--accent-primary)" }}>
+                      ${labResult.fairPrice.toLocaleString()}
+                    </strong>{" "}
+                    — <strong className="font-mono" style={{ color: "var(--accent-success)" }}>{savingsPct}% savings</strong>.
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -28,7 +28,6 @@ export default function DiamondCalculatorPage() {
     : estimateDiamondPrice(carat, color, clarity, "natural") // fallback
 
   const result = origin === "lab_grown" ? labResult : natResult
-  const altResult = origin === "lab_grown" ? natResult : labResult
 
   const savingsPct = origin === "lab_grown"
     ? Math.round((1 - labResult.fairPrice / natResult.fairPrice) * 100)

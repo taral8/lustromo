@@ -5,6 +5,7 @@ import { ToolsGrid } from "@/components/home/tools-grid"
 import { HowItWorks } from "@/components/home/how-it-works"
 import { PriceSnapshot } from "@/components/home/price-snapshot"
 import { Testimonials } from "@/components/home/testimonials"
+import { PricingSection } from "@/components/home/pricing-section"
 
 export const metadata: Metadata = {
   title: "Lustrumo — Independent Diamond & Gold Price Intelligence",
@@ -20,6 +21,7 @@ export default function HomePage({ params }: { params: { locale: string } }) {
       <ToolsGrid locale={params.locale} />
       <HowItWorks />
       <PriceSnapshot locale={params.locale} />
+      <PricingSection locale={params.locale} />
       <Testimonials />
     </>
   )

@@ -1,4 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
+import { valuateGoldProduct, type GoldValuationResult } from "@/lib/valuation/gold-valuation"
+import { type GoldProductType } from "@/lib/scrapers/gold-scraper"
+import { createServiceClient } from "@/lib/supabase"
+
+export interface GoldDealResult {
+  valuation: GoldValuationResult
+  productType: GoldProductType
+  marketAvg: { avgMakingCharge: number; count: number } | null
+}
 
 export interface ScrapedProduct {
   name: string | null
@@ -286,7 +295,72 @@ export async function POST(request: NextRequest) {
     const specs = extractSpecs(html, name, url)
     const productType = detectProductType(specs, name, html)
 
-    return NextResponse.json({ name, price, currency: "AUD", image, retailer, url, productType, specs } as ScrapedProduct)
+    // Gold valuation if gold product detected
+    let goldDeal: GoldDealResult | null = null
+    if (productType === "gold" && price) {
+      const karatNum = specs.karatGold ? parseInt(specs.karatGold) : null
+      const weightNum = specs.weightGrams ? parseFloat(specs.weightGrams) : null
+
+      // Detect gold product type from title
+      const titleLower = (name || "").toLowerCase()
+      const goldTypeMap: [RegExp, GoldProductType][] = [
+        [/\bmangalsutra\b/i, "mangalsutra"],
+        [/\bnose\s*(?:ring|pin|stud)\b/i, "nosering"],
+        [/\bbangle\b|\bkada\b/i, "bangle"],
+        [/\bbracelet\b/i, "bracelet"],
+        [/\bchain\b/i, "chain"],
+        [/\bnecklace\b/i, "necklace"],
+        [/\bpendant\b|\blocket\b/i, "pendant"],
+        [/\bearring\b|\bjhumka\b|\bstud\b|\btops\b/i, "earring"],
+        [/\bring\b/i, "ring"],
+      ]
+      let goldProdType: GoldProductType = "unknown"
+      for (const [regex, type] of goldTypeMap) {
+        if (regex.test(titleLower)) { goldProdType = type; break }
+      }
+
+      const hasDiamonds = /\bdiamond\b/i.test((name || "") + " " + html.substring(0, 10000))
+      const hasGemstones = /\b(?:ruby|sapphire|emerald|opal|topaz|amethyst|garnet|pearl)\b/i.test((name || "") + " " + html.substring(0, 10000))
+
+      const valuation = valuateGoldProduct({
+        price_aud: price,
+        karat: karatNum,
+        weight_grams: weightNum,
+        product_type: goldProdType,
+        product_title: name || "",
+        has_diamonds: hasDiamonds,
+        has_gemstones: hasGemstones,
+      })
+
+      if (valuation) {
+        // Fetch market avg for this product type from DB
+        let marketAvg: { avgMakingCharge: number; count: number } | null = null
+        const supabase = createServiceClient()
+        if (supabase) {
+          const { data: marketData } = await supabase
+            .from("gold_products")
+            .select("making_charge_pct")
+            .eq("locale", "au")
+            .eq("product_type", goldProdType)
+            .not("making_charge_pct", "is", null)
+
+          if (marketData && marketData.length > 0) {
+            const charges = marketData.map(d => Number(d.making_charge_pct))
+            marketAvg = {
+              avgMakingCharge: Math.round(charges.reduce((a, b) => a + b, 0) / charges.length * 10) / 10,
+              count: charges.length,
+            }
+          }
+        }
+
+        goldDeal = { valuation, productType: goldProdType, marketAvg }
+      }
+    }
+
+    return NextResponse.json({
+      name, price, currency: "AUD", image, retailer, url, productType, specs,
+      ...(goldDeal ? { goldDeal } : {}),
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ error: `Failed to check deal: ${message}` }, { status: 500 })

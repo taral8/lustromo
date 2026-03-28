@@ -4,8 +4,22 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ShieldCheck, Loader2, AlertCircle, ExternalLink, Diamond, Info } from "lucide-react"
+import { ShieldCheck, Loader2, AlertCircle, ExternalLink, Diamond, Info, Coins } from "lucide-react"
 import { calculateFairValue, comparePrice, type ComparisonResult, type ComparisonStatus } from "@/lib/valuation/engine"
+
+interface GoldDealResult {
+  valuation: {
+    estimated_intrinsic_value: number
+    weight_source: "listed" | "estimated"
+    estimated_weight_grams: number
+    making_charge_pct: number
+    making_charge_rating: "low" | "average" | "high" | "very_high"
+    fair_price_range: { low: number; high: number }
+    is_fair: boolean
+  }
+  productType: string
+  marketAvg: { avgMakingCharge: number; count: number } | null
+}
 
 interface ScrapedProduct {
   name: string | null
@@ -48,6 +62,7 @@ export default function DealCheckerPage() {
   const [error, setError] = useState<string | null>(null)
   const [product, setProduct] = useState<ScrapedProduct | null>(null)
   const [comparison, setComparison] = useState<ComparisonResult | null>(null)
+  const [goldDeal, setGoldDeal] = useState<GoldDealResult | null>(null)
 
   async function handleCheck() {
     if (!url.trim()) return
@@ -55,6 +70,7 @@ export default function DealCheckerPage() {
     setError(null)
     setProduct(null)
     setComparison(null)
+    setGoldDeal(null)
 
     try {
       const res = await fetch("/api/deal-check", {
@@ -69,6 +85,11 @@ export default function DealCheckerPage() {
       }
 
       setProduct(data)
+
+      // Gold deal result from API
+      if (data.goldDeal) {
+        setGoldDeal(data.goldDeal)
+      }
 
       // Run comparison if we have a diamond with a price
       if (data.productType === "diamond" && data.price) {
@@ -228,7 +249,7 @@ export default function DealCheckerPage() {
                 Lustrumo cannot generate a comparison without a verified listed price.
               </Warning>
             )}
-            {product.productType === "gold" && (
+            {product.productType === "gold" && !goldDeal && (
               <Warning>
                 This appears to be a gold jewellery piece. Use our <a href="/au/gold-calculator" style={{ color: "var(--accent-primary)", fontWeight: 600 }}>Gold Calculator</a> for
                 a melt value and making charge analysis.
@@ -364,6 +385,91 @@ export default function DealCheckerPage() {
               We couldn&apos;t generate a reliable estimate for this product. Key data — such as diamond grade,
               metal weight, or certified stone details — was not available in the retailer&apos;s listing.
               Ask your retailer for a full specification sheet before comparing prices.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ─── Gold Valuation Result ─── */}
+      {goldDeal && product && !loading && (
+        <Card className="mt-6">
+          <CardContent className="p-6">
+            {/* Gold verdict badge */}
+            <div className="text-center">
+              <div className="mx-auto mb-1 inline-flex items-center gap-2 rounded-full px-5 py-2 text-base font-bold"
+                style={{
+                  background: goldDeal.valuation.making_charge_rating === "low" ? "#10B981"
+                    : goldDeal.valuation.making_charge_rating === "average" ? "#3B82F6"
+                    : goldDeal.valuation.making_charge_rating === "high" ? "#F59E0B"
+                    : "#EF4444",
+                  color: "#fff",
+                }}>
+                <Coins className="h-4 w-4" />
+                {goldDeal.valuation.making_charge_rating === "low" ? "Great Value"
+                  : goldDeal.valuation.making_charge_rating === "average" ? "Fair Price"
+                  : goldDeal.valuation.making_charge_rating === "high" ? "Above Average Markup"
+                  : "High Markup"}
+              </div>
+            </div>
+
+            {/* Gold breakdown */}
+            <div className="mx-auto mt-6 max-w-sm">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                Gold Value Breakdown
+              </p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--text-secondary)" }}>Retail price</span>
+                  <span className="font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+                    ${product.price?.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    Est. gold melt value
+                    <span className="ml-1 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                      ({goldDeal.valuation.estimated_weight_grams}g, {goldDeal.valuation.weight_source})
+                    </span>
+                  </span>
+                  <span className="font-mono font-semibold" style={{ color: "var(--accent-primary)" }}>
+                    ${goldDeal.valuation.estimated_intrinsic_value.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+                  <span className="font-semibold" style={{ color: "var(--text-primary)" }}>Making charge</span>
+                  <span className="font-mono font-bold" style={{
+                    color: goldDeal.valuation.making_charge_pct <= 30 ? "var(--accent-success)"
+                      : goldDeal.valuation.making_charge_pct <= 50 ? "var(--accent-warning)"
+                      : "var(--accent-danger)",
+                  }}>
+                    {goldDeal.valuation.making_charge_pct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--text-muted)" }}>Fair price range</span>
+                  <span className="font-mono text-xs" style={{ color: "var(--text-primary)" }}>
+                    ${goldDeal.valuation.fair_price_range.low.toLocaleString()} – ${goldDeal.valuation.fair_price_range.high.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Market context */}
+              {goldDeal.marketAvg && (
+                <div className="mt-4 rounded-lg p-3" style={{ background: "var(--background-alt)" }}>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    The average making charge for <strong className="capitalize">{goldDeal.productType}</strong> is{" "}
+                    <strong className="font-mono">{goldDeal.marketAvg.avgMakingCharge.toFixed(0)}%</strong> across{" "}
+                    <strong>{goldDeal.marketAvg.count}</strong> products in our database.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Disclaimer */}
+            <p className="mx-auto mt-5 max-w-sm text-center text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+              Gold valuation based on estimated weight and current spot price. Products with diamonds
+              or gemstones will show higher making charges. Always request an itemised breakdown from
+              your retailer.
             </p>
           </CardContent>
         </Card>

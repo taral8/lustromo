@@ -20,11 +20,12 @@ import {
 
 const navLinks = [
   { label: "Diamond Prices", href: "/diamond-prices" },
-  { label: "Gold Calculator", href: "/gold-calculator" },
+  { label: "Gold Prices", href: "/gold-prices" },
   { label: "Deal Checker", href: "/deal-check" },
 ]
 
 const toolsLinks = [
+  { label: "Gold Calculator", href: "/gold-calculator" },
   { label: "Diamond Price Calculator", href: "/diamond-calculator" },
   { label: "Certification Verifier", href: "/verify" },
   { label: "Retailer Scorecard", href: "/retailers" },

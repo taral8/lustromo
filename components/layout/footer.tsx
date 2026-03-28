@@ -19,6 +19,7 @@ export function Footer({ locale }: FooterProps) {
             <ul className="mt-4 space-y-3">
               {[
                 { label: "Diamond Prices", href: "/diamond-prices" },
+                { label: "Gold Prices", href: "/gold-prices" },
                 { label: "Gold Calculator", href: "/gold-calculator" },
                 { label: "Diamond Calculator", href: "/diamond-calculator" },
                 { label: "Deal Checker", href: "/deal-check" },

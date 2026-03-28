@@ -70,12 +70,18 @@ export function parseShopifyProduct(product: ShopifyProduct, _baseUrl: string): 
 
   // ─── DIAMOND TYPE ───
   let diamondType: "natural" | "lab_grown" | null = null
-  if (/\bnatural\b|\bmined\s*diamond\b|\bearth[\s-]?grown\b/i.test(product.title)) diamondType = "natural"
-  if (/lab[\s-]?grown|lab[\s-]?created|cvd|hpht|laboratory|\bLGD\b|\bLG\s*diamond/i.test(lower)) diamondType = "lab_grown"
-  // Natural signals in tags/body override if title didn't match
+  // Explicit lab-grown signals (check first — these are definitive)
+  const labGrownSignals = /lab[\s-]?grown|lab[\s-]?created|cvd|hpht|laboratory|\bLGD\b|\bLG\s*diamond|\blab\s*diamond|\bcreated\s*diamond/i
+  if (labGrownSignals.test(lower)) diamondType = "lab_grown"
+  // Explicit natural signals
+  if (!diamondType && /\bnatural\b|\bmined\s*diamond\b|\bearth[\s-]?grown\b/i.test(product.title)) diamondType = "natural"
   if (!diamondType && /\bnatural\s*diamond\b|\bmined\b|\bearth[\s-]?grown\b/i.test(lower)) diamondType = "natural"
+  // Cert body heuristics
   if (!diamondType && certBody === "GIA") diamondType = "natural"
   if (!diamondType && certBody === "IGI" && !/\bnatural\b/i.test(lower)) diamondType = "lab_grown"
+  // Default: if product mentions "diamond" but has no lab-grown indicators → natural
+  // Most traditional jewellers sell natural unless explicitly stated otherwise
+  if (!diamondType && /\bdiamond\b/i.test(lower)) diamondType = "natural"
 
   // ─── CARAT ───
   let carat: number | null = null

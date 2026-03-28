@@ -29,7 +29,8 @@ function calculateDataQualityScore(flags: FlagType[]): number {
 export function normaliseShopifyProduct(
   product: ShopifyProduct,
   retailerId: string,
-  baseUrl: string
+  baseUrl: string,
+  retailerName?: string
 ): NormalisedProduct | null {
   // Parse specs from title + body + tags
   const specs = parseShopifyProduct(product, baseUrl)
@@ -117,6 +118,7 @@ export function normaliseShopifyProduct(
   return {
     lustrumo_id: generateLustrumoId(),
     retailer_id: retailerId,
+    retailer_name: retailerName || null,
     retailer_product_id: String(product.id),
     retailer_sku: product.variants[0]?.sku || null,
     product_url: `${baseUrl}/products/${product.handle}`,

@@ -51,7 +51,7 @@ export function classifyProduct(input: ClassificationInput): ProductType {
     /\b(?:gia|igi|hrd)\b/i.test(combined) ||
     /\d+\.?\d*\s*ct/i.test(input.title)
 
-  if (hasDiamondSignal && (input.hasCarat || input.hasCert)) {
+  if (hasDiamondSignal) {
     // Determine natural vs lab-grown
     const isLabGrown = input.diamondType === "lab_grown" ||
       /lab[\s-]?grown|lab[\s-]?created|cvd|hpht/i.test(combined)

@@ -49,7 +49,7 @@ export async function GET() {
 
   async function fetchDiamondPage(offset: number) {
     return sb.from("products")
-      .select("retailer_id, diamond_centre_type, diamond_centre_carat, diamond_centre_color, diamond_centre_clarity, product_type")
+      .select("retailer_id, retailer_name, diamond_centre_type, diamond_centre_carat, diamond_centre_color, diamond_centre_clarity, product_type")
       .eq("locale", "au")
       .eq("is_available", true)
       .range(offset, offset + 999)
@@ -67,7 +67,7 @@ export async function GET() {
   }
 
   // 2. Fetch ALL diamond products
-  const diamondData: { retailer_id: string; diamond_centre_type: string | null; diamond_centre_carat: number | null; diamond_centre_color: string | null; diamond_centre_clarity: string | null; product_type: string | null }[] = []
+  const diamondData: { retailer_id: string; retailer_name: string | null; diamond_centre_type: string | null; diamond_centre_carat: number | null; diamond_centre_color: string | null; diamond_centre_clarity: string | null; product_type: string | null }[] = []
   let diamondOffset = 0
   while (true) {
     const { data } = await fetchDiamondPage(diamondOffset)
@@ -103,7 +103,7 @@ export async function GET() {
 
   // Process diamond products
   for (const d of diamondData) {
-    const name = idToName[d.retailer_id] || d.retailer_id.replace(/_au$/, "").replace(/_/g, " ")
+    const name = d.retailer_name || idToName[d.retailer_id] || d.retailer_id.replace(/_au$/, "").replace(/_/g, " ")
     if (!retailerMap[name]) retailerMap[name] = { goldProducts: [], diamondProducts: [], url: null }
     retailerMap[name].diamondProducts.push(d)
   }

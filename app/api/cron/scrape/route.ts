@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       let skipped = 0
 
       for (const product of shopifyProducts) {
-        const result = normaliseShopifyProduct(product, retailerId, retailer.website_url)
+        const result = normaliseShopifyProduct(product, retailerId, retailer.website_url, retailer.name)
         if (!result) { skipped++; continue }
 
         const isLabGrown = result.diamond_centre_type === "lab_grown"

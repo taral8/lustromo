@@ -80,6 +80,7 @@ export interface DataQualityFlag {
 export interface NormalisedProduct {
   lustrumo_id: string
   retailer_id: string
+  retailer_name: string | null
   retailer_product_id: string
   retailer_sku: string | null
   product_url: string

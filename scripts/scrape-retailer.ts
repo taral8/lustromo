@@ -99,7 +99,7 @@ async function scrapeRetailer(slug: string) {
     let skippedNonLabGrown = 0
 
     for (const product of shopifyProducts) {
-      const result = normaliseShopifyProduct(product, retailerId, retailer.website_url)
+      const result = normaliseShopifyProduct(product, retailerId, retailer.website_url, retailer.name)
       if (!result) {
         skipped++
         continue

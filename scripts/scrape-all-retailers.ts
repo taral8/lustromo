@@ -114,7 +114,7 @@ async function scrapeDiamonds(config: RetailerConfig, shopifyProducts: ShopifyPr
 
   for (const product of shopifyProducts) {
     try {
-      const result = normaliseShopifyProduct(product, retailerId, config.baseUrl)
+      const result = normaliseShopifyProduct(product, retailerId, config.baseUrl, config.name)
       if (!result) continue
       const isDiamond = result.product_type.includes("diamond") || result.product_type.includes("engagement")
       if (!isDiamond) continue

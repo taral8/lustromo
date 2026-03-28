@@ -8,6 +8,8 @@
  * SKILL.md Section 5.1: Always express fair value as a range.
  */
 
+import { estimateDiamondPrice } from "@/lib/diamond-data"
+
 // ─── Types ───
 
 export type NaturalDiamondVerdict =
@@ -25,6 +27,8 @@ export interface NaturalDiamondValuation {
   price_diff_pct: number | null // % above/below estimate, null if no retail price
   shape_multiplier: number
   base_price_source: string // description of how base was derived
+  lab_grown_equivalent_price: number // what a comparable lab-grown would cost
+  savings_vs_lab_grown_pct: number   // % the buyer would save going lab-grown
 }
 
 // ─── Base Price Table (AUD, Round Brilliant) ───
@@ -148,6 +152,9 @@ export function valuateNaturalDiamond(input: NaturalDiamondInput): NaturalDiamon
   // Must have carat weight
   if (!carat || carat <= 0) return null
 
+  // Lab-grown equivalent (compute early so we can include in insufficient_data returns)
+  const labEst = estimateDiamondPrice(carat, color || "G", clarity || "VS2", "lab_grown")
+
   // Must have color AND clarity for a meaningful estimate
   if (!color || !clarity) {
     return {
@@ -158,6 +165,8 @@ export function valuateNaturalDiamond(input: NaturalDiamondInput): NaturalDiamon
       price_diff_pct: null,
       shape_multiplier: 1,
       base_price_source: "Missing color or clarity — cannot estimate",
+      lab_grown_equivalent_price: labEst.fairPrice,
+      savings_vs_lab_grown_pct: 0,
     }
   }
 
@@ -171,6 +180,8 @@ export function valuateNaturalDiamond(input: NaturalDiamondInput): NaturalDiamon
       price_diff_pct: null,
       shape_multiplier: 1,
       base_price_source: `Color ${color} / Clarity ${clarity} outside valuation range`,
+      lab_grown_equivalent_price: labEst.fairPrice,
+      savings_vs_lab_grown_pct: 0,
     }
   }
 
@@ -212,6 +223,11 @@ export function valuateNaturalDiamond(input: NaturalDiamondInput): NaturalDiamon
   const bandLabel = band.replace("_", " ").replace("DEF", "D-F").replace("GHI", "G-I").replace("JK", "J-K")
     .replace("IFVVS", "IF-VVS").replace("VSSI", "VS-SI")
 
+  // Lab-grown savings
+  const savingsVsLabGrown = fairEstimate > 0
+    ? Math.round((1 - labEst.fairPrice / fairEstimate) * 100)
+    : 0
+
   return {
     fair_estimate: fairEstimate,
     fair_range: { low: fairLow, high: fairHigh },
@@ -220,5 +236,7 @@ export function valuateNaturalDiamond(input: NaturalDiamondInput): NaturalDiamon
     price_diff_pct: priceDiffPct,
     shape_multiplier: shapeMult,
     base_price_source: `${carat}ct ${bandLabel} ${shapeKey} (${shapeMult}× shape adj.)`,
+    lab_grown_equivalent_price: labEst.fairPrice,
+    savings_vs_lab_grown_pct: savingsVsLabGrown,
   }
 }

@@ -210,7 +210,7 @@ export async function ingestProducts(
   supabase: SupabaseClient,
   products: NormalisedProduct[],
   retailerId: string
-): Promise<{ ingested: number; flagged: number; flagsSummary: Record<string, number> }> {
+): Promise<{ ingested: number; flagged: number; priceChanges: number; flagsSummary: Record<string, number> }> {
   // Section 9 Rule 5: detect duplicate certs within this batch
   detectDuplicateCerts(products)
 
@@ -241,9 +241,34 @@ export async function ingestProducts(
 
   let ingested = 0
   let flagged = 0
+  let priceChanges = 0
   const flagsSummary: Record<string, number> = {}
 
   for (const product of products) {
+    // Check for price change before upserting
+    if (product.price_aud && product.price_aud > 0) {
+      const { data: existing } = await supabase
+        .from("products")
+        .select("price_aud, retailer_name")
+        .eq("retailer_id", product.retailer_id)
+        .eq("retailer_product_id", product.retailer_product_id)
+        .single()
+
+      if (existing?.price_aud && existing.price_aud !== product.price_aud) {
+        const oldPrice = Number(existing.price_aud)
+        const newPrice = product.price_aud
+        const changePct = oldPrice > 0 ? Math.round(((newPrice - oldPrice) / oldPrice) * 10000) / 100 : null
+        const { error: histErr } = await supabase.from("diamond_price_history").insert({
+          product_url: product.product_url,
+          retailer_name: product.retailer_name || existing.retailer_name || retailerId,
+          price_old: oldPrice,
+          price_new: newPrice,
+          change_pct: changePct,
+        })
+        if (!histErr) priceChanges++
+      }
+    }
+
     // Upsert product
     const { error } = await supabase
       .from("products")
@@ -287,5 +312,5 @@ export async function ingestProducts(
     }
   }
 
-  return { ingested, flagged, flagsSummary }
+  return { ingested, flagged, priceChanges, flagsSummary }
 }

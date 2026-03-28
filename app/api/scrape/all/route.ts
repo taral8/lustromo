@@ -6,6 +6,7 @@ import { valuateGoldProduct } from "@/lib/valuation/gold-valuation"
 import { normaliseShopifyProduct, ingestProducts } from "@/lib/ingestion/pipeline"
 import { type ShopifyProduct } from "@/lib/ingestion/types"
 import { getSpotPricePerGram } from "@/lib/gold-spot-price"
+import { computeDiamondPriceIndex } from "@/lib/diamond-price-index"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -257,12 +258,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Compute daily diamond price index after scraping completes
+  const indexResult = await computeDiamondPriceIndex(supabase)
+
   return NextResponse.json({
     retailers_attempted: activeRetailers.length,
     retailers_accessible: retailersAccessible,
     retailers_blocked: retailersBlocked,
     total_gold_products: totalGold,
     total_diamond_products: totalDiamonds,
+    priceIndex: indexResult,
     by_retailer: results,
     timestamp: new Date().toISOString(),
   })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase"
 import { normaliseShopifyProduct, ingestProducts } from "@/lib/ingestion/pipeline"
 import { type ShopifyProduct } from "@/lib/ingestion/types"
+import { computeDiamondPriceIndex } from "@/lib/diamond-price-index"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300 // 5 minutes (Vercel Pro)
@@ -113,10 +114,14 @@ export async function GET(request: NextRequest) {
   const totalIngested = results.reduce((s, r) => s + r.ingested, 0)
   const totalFlagged = results.reduce((s, r) => s + r.flagged, 0)
 
+  // Compute daily diamond price index after scraping completes
+  const indexResult = await computeDiamondPriceIndex(supabase)
+
   return NextResponse.json({
     retailers: results.length,
     totalIngested,
     totalFlagged,
+    priceIndex: indexResult,
     results,
     timestamp: new Date().toISOString(),
   })

@@ -70,8 +70,10 @@ export function parseShopifyProduct(product: ShopifyProduct, _baseUrl: string): 
 
   // ─── DIAMOND TYPE ───
   let diamondType: "natural" | "lab_grown" | null = null
-  if (/\bnatural\b/i.test(product.title)) diamondType = "natural"
-  if (/lab[\s-]?grown|lab[\s-]?created|cvd|hpht|laboratory/i.test(lower)) diamondType = "lab_grown"
+  if (/\bnatural\b|\bmined\s*diamond\b|\bearth[\s-]?grown\b/i.test(product.title)) diamondType = "natural"
+  if (/lab[\s-]?grown|lab[\s-]?created|cvd|hpht|laboratory|\bLGD\b|\bLG\s*diamond/i.test(lower)) diamondType = "lab_grown"
+  // Natural signals in tags/body override if title didn't match
+  if (!diamondType && /\bnatural\s*diamond\b|\bmined\b|\bearth[\s-]?grown\b/i.test(lower)) diamondType = "natural"
   if (!diamondType && certBody === "GIA") diamondType = "natural"
   if (!diamondType && certBody === "IGI" && !/\bnatural\b/i.test(lower)) diamondType = "lab_grown"
 

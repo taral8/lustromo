@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Info, Loader2, Coins } from "lucide-react"
+import { Info, Loader2, Coins, ExternalLink, ArrowUpDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 /**
@@ -38,6 +38,54 @@ interface GoldPrice {
   timestamp: string
 }
 
+// ─── Gold Intelligence Types ───
+
+interface GoldProduct {
+  id: string
+  title: string
+  product_url: string
+  image_url: string | null
+  price_local: number
+  karat: number | null
+  gold_color: string | null
+  product_type: string | null
+  weight_grams: number | null
+  weight_source: string | null
+  intrinsic_value: number | null
+  making_charge_pct: number | null
+  making_charge_rating: string | null
+  fair_price_low: number | null
+  fair_price_high: number | null
+  has_diamonds: boolean
+  has_gemstones: boolean
+  retailer_name: string
+}
+
+const KARAT_FILTERS = ["All", "9", "14", "18", "22", "24"]
+const TYPE_FILTERS = ["All", "ring", "chain", "bangle", "pendant", "earring", "necklace"]
+const RATING_FILTERS = [
+  { label: "All", value: "" },
+  { label: "Low", value: "low" },
+  { label: "Average", value: "average" },
+  { label: "High", value: "high" },
+]
+
+const RATING_STYLES: Record<string, { bg: string; text: string }> = {
+  low: { bg: "rgba(16,185,129,0.1)", text: "var(--accent-success)" },
+  average: { bg: "rgba(59,130,246,0.1)", text: "var(--accent-secondary)" },
+  high: { bg: "rgba(245,158,11,0.1)", text: "var(--accent-warning)" },
+  very_high: { bg: "rgba(239,68,68,0.1)", text: "var(--accent-danger)" },
+}
+
+const RATING_LABELS: Record<string, string> = {
+  low: "Low",
+  average: "Average",
+  high: "High",
+  very_high: "Very High",
+}
+
+type SortField = "price_local" | "making_charge_pct" | "karat"
+
 export default function GoldCalculatorPage() {
   const [karatIdx, setKaratIdx] = useState(3) // default 22K
   const [weight, setWeight] = useState(5)
@@ -45,6 +93,16 @@ export default function GoldCalculatorPage() {
   const [goldPrice, setGoldPrice] = useState<GoldPrice | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedTier, setSelectedTier] = useState(0) // default: machine-made chain
+
+  // Gold Intelligence state
+  const [products, setProducts] = useState<GoldProduct[]>([])
+  const [productCount, setProductCount] = useState(0)
+  const [productsLoading, setProductsLoading] = useState(true)
+  const [filterKarat, setFilterKarat] = useState("All")
+  const [filterType, setFilterType] = useState("All")
+  const [filterRating, setFilterRating] = useState("")
+  const [sortBy, setSortBy] = useState<SortField>("price_local")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
   useEffect(() => {
     fetch("/api/gold-price")
@@ -55,6 +113,28 @@ export default function GoldCalculatorPage() {
         setLoading(false)
       })
   }, [])
+
+  // Fetch gold products
+  useEffect(() => {
+    setProductsLoading(true)
+    const params = new URLSearchParams({ sort: sortBy, dir: sortDir, limit: "100" })
+    if (filterKarat !== "All") params.set("karat", filterKarat)
+    if (filterType !== "All") params.set("type", filterType)
+    if (filterRating) params.set("rating", filterRating)
+
+    fetch(`/api/gold-products?${params}`)
+      .then(res => res.json())
+      .then(data => {
+        setProducts(data.products || [])
+        setProductCount(data.count || 0)
+        setProductsLoading(false)
+      })
+      .catch(() => {
+        setProducts([])
+        setProductCount(0)
+        setProductsLoading(false)
+      })
+  }, [filterKarat, filterType, filterRating, sortBy, sortDir])
 
   const karat = KARAT_OPTIONS[karatIdx]
   const spotPrice = goldPrice?.pricePerGram ?? 148.50
@@ -68,6 +148,15 @@ export default function GoldCalculatorPage() {
   const retailLow = intrinsicValue * tier.multiplierLow
   const retailHigh = intrinsicValue * tier.multiplierHigh
   const retailMid = (retailLow + retailHigh) / 2
+
+  function toggleSort(field: SortField) {
+    if (sortBy === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc")
+    } else {
+      setSortBy(field)
+      setSortDir("asc")
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
@@ -329,6 +418,202 @@ export default function GoldCalculatorPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          GOLD JEWELLERY PRICE INTELLIGENCE — Phase 2D
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="mt-16">
+        <h2 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+          Gold Jewellery Price Intelligence
+        </h2>
+        <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+          Making charge analysis across Australian retailers. See how much you&apos;re paying above gold value.
+        </p>
+
+        {/* Filters */}
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          {/* Karat filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Karat:</span>
+            <div className="flex gap-1">
+              {KARAT_FILTERS.map(k => (
+                <button key={k} onClick={() => setFilterKarat(k)}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    background: filterKarat === k ? "var(--accent-primary)" : "var(--background-alt)",
+                    color: filterKarat === k ? "#fff" : "var(--text-secondary)",
+                  }}>
+                  {k === "All" ? "All" : `${k}K`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Type filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Type:</span>
+            <div className="flex flex-wrap gap-1">
+              {TYPE_FILTERS.map(t => (
+                <button key={t} onClick={() => setFilterType(t)}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors"
+                  style={{
+                    background: filterType === t ? "var(--accent-primary)" : "var(--background-alt)",
+                    color: filterType === t ? "#fff" : "var(--text-secondary)",
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Rating filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Charge:</span>
+            <div className="flex gap-1">
+              {RATING_FILTERS.map(r => (
+                <button key={r.value} onClick={() => setFilterRating(r.value)}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    background: filterRating === r.value ? "var(--accent-primary)" : "var(--background-alt)",
+                    color: filterRating === r.value ? "#fff" : "var(--text-secondary)",
+                  }}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Product count */}
+        {!productsLoading && products.length > 0 && (
+          <p className="mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
+            Showing {products.length} of {productCount} gold products
+          </p>
+        )}
+
+        {/* Loading */}
+        {productsLoading && (
+          <Card className="mt-4">
+            <CardContent className="flex items-center justify-center gap-3 p-8">
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--accent-primary)" }} />
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading gold products...</span>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* No data */}
+        {!productsLoading && products.length === 0 && (
+          <Card className="mt-4">
+            <CardContent className="p-8 text-center">
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                {productCount === 0
+                  ? "Run the scraper to populate gold product data."
+                  : "No products match these filters. Try broadening your selection."}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Products table */}
+        {!productsLoading && products.length > 0 && (
+          <Card className="mt-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Product</th>
+                    <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Karat</th>
+                    <th className="px-4 py-3 text-left font-medium" style={{ color: "var(--text-secondary)" }}>Type</th>
+                    <th className="cursor-pointer px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}
+                      onClick={() => toggleSort("price_local")}>
+                      <span className="inline-flex items-center gap-1">
+                        Retail Price {sortBy === "price_local" && <ArrowUpDown className="h-3 w-3" />}
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}>Est. Gold Value</th>
+                    <th className="cursor-pointer px-4 py-3 text-right font-medium" style={{ color: "var(--text-secondary)" }}
+                      onClick={() => toggleSort("making_charge_pct")}>
+                      <span className="inline-flex items-center gap-1">
+                        Making Charge % {sortBy === "making_charge_pct" && <ArrowUpDown className="h-3 w-3" />}
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium" style={{ color: "var(--text-secondary)" }}>Rating</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map(p => {
+                    const ratingStyle = p.making_charge_rating ? RATING_STYLES[p.making_charge_rating] : null
+                    return (
+                      <tr key={p.id} className="transition-colors hover:bg-[var(--background-alt)]" style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {p.image_url && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={p.image_url} alt="" className="h-10 w-10 rounded-lg object-cover" style={{ border: "1px solid var(--border)" }} />
+                            )}
+                            <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium hover:underline"
+                              style={{ color: "var(--accent-primary)" }}>
+                              <span className="line-clamp-1 max-w-[200px]">{p.title}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.karat ? (
+                            <span className="rounded-md px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--background-alt)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+                              {p.karat}K
+                            </span>
+                          ) : (
+                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs capitalize" style={{ color: "var(--text-secondary)" }}>
+                          {p.product_type || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
+                          ${p.price_local.toLocaleString("en-AU", { minimumFractionDigits: 0 })}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                          {p.intrinsic_value ? `$${Number(p.intrinsic_value).toLocaleString("en-AU", { minimumFractionDigits: 0 })}` : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs" style={{
+                          color: p.making_charge_pct != null
+                            ? Number(p.making_charge_pct) <= 30 ? "var(--accent-success)"
+                            : Number(p.making_charge_pct) <= 50 ? "var(--accent-warning)"
+                            : "var(--accent-danger)"
+                            : "var(--text-muted)"
+                        }}>
+                          {p.making_charge_pct != null ? `${Number(p.making_charge_pct).toFixed(0)}%` : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {p.making_charge_rating && ratingStyle ? (
+                            <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                              style={{ background: ratingStyle.bg, color: ratingStyle.text }}>
+                              {RATING_LABELS[p.making_charge_rating] || p.making_charge_rating}
+                            </span>
+                          ) : (
+                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
+        {/* Disclaimer */}
+        {products.length > 0 && (
+          <p className="mt-4 text-center text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            Making charge estimates use weight estimates where retailer listings do not specify gram weight.
+            Products with diamonds or gemstones will show higher making charges as the stone value is included in the retail price.
+            All prices in AUD inc. GST.
+          </p>
+        )}
       </div>
     </div>
   )

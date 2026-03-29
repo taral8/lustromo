@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Check, Loader2 } from "lucide-react"
+import { Check, ArrowRight } from "lucide-react"
 
 const products = [
   {
@@ -12,7 +12,8 @@ const products = [
     title: "Diamond Intelligence Report",
     price: "$49",
     description: "Personalised top-5 stone recommendations, fair price analysis, and certification verification.",
-    cta: "Get Your Report — $49",
+    cta: "Learn More",
+    href: "diamond-report",
     features: ["Top-5 stone recommendations", "Fair price analysis for each", "Certification verification", "Retailer comparison", "Delivered within 24 hours"],
     highlighted: false,
   },
@@ -21,7 +22,8 @@ const products = [
     title: "Gold Valuation Report",
     price: "$29",
     description: "Melt value analysis, making charge assessment, and comparable pricing for any gold piece.",
-    cta: "Get Gold Valuation — $29",
+    cta: "Learn More",
+    href: "gold-report",
     features: ["Melt value calculation", "Making charge fairness assessment", "Comparable market pricing", "Retailer price comparison", "PDF report delivered via email"],
     highlighted: false,
   },
@@ -30,7 +32,8 @@ const products = [
     title: "Retailer Due Diligence Report",
     price: "$29",
     description: "Business verification, complaint history, pricing analysis, and review sentiment for any retailer.",
-    cta: "Check a Retailer — $29",
+    cta: "Learn More",
+    href: "retailer-report",
     features: ["Business registration check", "Online review sentiment analysis", "Pricing fairness score", "Return policy assessment", "Complaint history overview"],
     highlighted: false,
   },
@@ -39,47 +42,14 @@ const products = [
     title: "Annual Membership",
     price: "$149/year",
     description: "Unlimited deal checks, 50% off all reports, monthly market intelligence, priority access.",
-    cta: "Join Lustrumo — $149/year",
+    cta: "Learn More",
+    href: "membership",
     features: ["Unlimited deal checks", "50% off all premium reports", "Monthly market intelligence email", "Priority access to new tools", "Member-only pricing data"],
     highlighted: true,
   },
 ]
 
 export default function PremiumPage() {
-  const [loadingProduct, setLoadingProduct] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleCheckout(productType: string) {
-    setLoadingProduct(productType)
-    setError(null)
-
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productType }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || "Checkout failed")
-        setLoadingProduct(null)
-        return
-      }
-
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        setError("No checkout URL returned")
-        setLoadingProduct(null)
-      }
-    } catch {
-      setError("Network error — please try again")
-      setLoadingProduct(null)
-    }
-  }
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <div className="text-center">
@@ -87,15 +57,9 @@ export default function PremiumPage() {
           Premium Intelligence Reports
         </h1>
         <p className="mt-2 text-base" style={{ color: "var(--text-secondary)" }}>
-          Go deeper with personalised analysis.
+          Go deeper with personalised analysis before you buy.
         </p>
       </div>
-
-      {error && (
-        <div className="mx-auto mt-6 max-w-md rounded-lg p-3 text-center text-sm" style={{ background: "rgba(239,68,68,0.05)", color: "var(--accent-danger)", border: "1px solid rgba(239,68,68,0.2)" }}>
-          {error}
-        </div>
-      )}
 
       <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {products.map(product => (
@@ -126,14 +90,12 @@ export default function PremiumPage() {
               <Button
                 className="w-full font-semibold"
                 variant={product.highlighted ? "default" : "outline"}
-                onClick={() => handleCheckout(product.key)}
-                disabled={loadingProduct === product.key}
+                asChild
               >
-                {loadingProduct === product.key ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  product.cta
-                )}
+                <Link href={`/au/premium/${product.href}`}>
+                  {product.cta}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
               </Button>
             </CardContent>
           </Card>

@@ -52,7 +52,7 @@ export function HeroSection({ locale, stats }: HeroSectionProps) {
             {[
               { value: formatStatNumber(totalProducts), label: "Products Tracked" },
               { value: "Live", label: "Diamond Prices" },
-              { value: formatStatNumber(stats.retailerCount), label: "Retailers Covered" },
+              { value: "Live", label: "Gold Prices" },
               { value: formatStatNumber(stats.goldCount), label: "Gold Products Analysed" },
             ].map((stat) => (
               <div key={stat.label} className="text-center">

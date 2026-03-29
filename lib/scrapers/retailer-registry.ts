@@ -159,6 +159,38 @@ export const retailers: RetailerConfig[] = [
     categories: ["gold", "diamond", "traditional"],
     active: true,
   },
+  {
+    name: "Australian Diamond Network",
+    baseUrl: "https://www.australiandiamondnetwork.com.au",
+    locale: "au",
+    platform: "shopify",
+    categories: ["diamond", "lab_grown", "gold"],
+    active: true,
+  },
+  {
+    name: "Michael Hill",
+    baseUrl: "https://www.michaelhill.com.au",
+    locale: "au",
+    platform: "shopify",
+    categories: ["diamond", "lab_grown", "gold"],
+    active: true,
+  },
+  {
+    name: "Glamira Australia",
+    baseUrl: "https://www.glamira.com.au",
+    locale: "au",
+    platform: "shopify",
+    categories: ["diamond", "lab_grown", "gold"],
+    active: true,
+  },
+  {
+    name: "Oroginale Fine Jewellery",
+    baseUrl: "https://oroginale.myshopify.com",
+    locale: "au",
+    platform: "shopify",
+    categories: ["diamond", "gold"],
+    active: true,
+  },
 ]
 
 export function getActiveRetailers(): RetailerConfig[] {

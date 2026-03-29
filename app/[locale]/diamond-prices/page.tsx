@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { TrendingUp, TrendingDown, Loader2, Layers, List, ExternalLink } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -77,8 +78,16 @@ interface PriceIndexEntry {
 }
 
 export default function DiamondPricesPage() {
-  const [origin, setOrigin] = useState<DiamondOrigin>("lab_grown")
-  const [shape, setShape] = useState<DiamondShape>("round")
+  const searchParams = useSearchParams()
+  const initialShape = (searchParams.get("shape") || "round") as DiamondShape
+  const initialOrigin = (searchParams.get("origin") || "lab_grown") as DiamondOrigin
+
+  const [origin, setOrigin] = useState<DiamondOrigin>(
+    (["lab_grown", "natural"] as DiamondOrigin[]).includes(initialOrigin) ? initialOrigin : "lab_grown"
+  )
+  const [shape, setShape] = useState<DiamondShape>(
+    shapes.includes(initialShape) ? initialShape : "round"
+  )
   const [colorBand, setColorBand] = useState("")
   const [clarityBand, setClarityBand] = useState("")
   const [timeframe, setTimeframe] = useState("1M")

@@ -1,12 +1,15 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { type PlatformStats, formatStatNumber } from "@/lib/platform-stats"
 
 interface HeroSectionProps {
   locale: string
+  stats: PlatformStats
 }
 
-export function HeroSection({ locale }: HeroSectionProps) {
+export function HeroSection({ locale, stats }: HeroSectionProps) {
   const prefix = `/${locale}`
+  const totalProducts = stats.diamondCount + stats.goldCount
 
   return (
     <section className="relative overflow-hidden" style={{ background: "var(--surface-dark)" }}>
@@ -47,10 +50,10 @@ export function HeroSection({ locale }: HeroSectionProps) {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
             {[
-              { value: "50,000+", label: "Diamonds Tracked" },
-              { value: "Live", label: "Gold Prices" },
-              { value: "100+", label: "Retailers Rated" },
-              { value: "24hr", label: "Report Delivery" },
+              { value: formatStatNumber(totalProducts), label: "Products Tracked" },
+              { value: "Live", label: "Diamond Prices" },
+              { value: formatStatNumber(stats.retailerCount), label: "Retailers Covered" },
+              { value: formatStatNumber(stats.goldCount), label: "Gold Products Analysed" },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="font-mono text-2xl font-bold text-white sm:text-3xl">

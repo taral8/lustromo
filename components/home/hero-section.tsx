@@ -36,7 +36,7 @@ export function HeroSection({ locale }: HeroSectionProps) {
               className="border-white/40 bg-white/10 px-6 py-3 font-semibold text-white hover:border-white/60 hover:bg-white/20 hover:text-white"
               asChild
             >
-              <Link href={`${prefix}/gold-prices`}>Gold Price</Link>
+              <Link href={`${prefix}/gold-prices`}>Check Gold Price</Link>
             </Button>
           </div>
         </div>

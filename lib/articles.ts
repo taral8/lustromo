@@ -4,6 +4,7 @@ export interface Article {
   excerpt: string
   category: string
   readTime: string
+  image: string        // path under /images/learn/
   featured?: boolean   // cornerstone articles shown first
   content?: ArticleSection[]
 }
@@ -21,6 +22,7 @@ export const articles: Article[] = [
     excerpt: "Current prices, CVD vs HPHT, IGI vs GIA certification, resale value, and how to check if you're getting a fair price. Based on 9,400+ products from Australian retailers.",
     category: "Lab-Grown Diamonds",
     readTime: "12 min",
+    image: "/images/learn/lab-grown-diamonds-guide.jpg",
     featured: true,
   },
   {
@@ -29,6 +31,7 @@ export const articles: Article[] = [
     excerpt: "Making charges range from 15% to over 50%. Learn what's normal for rings, chains, bangles and necklaces using data from 6,600+ Australian gold products.",
     category: "Gold Buying",
     readTime: "8 min",
+    image: "/images/learn/gold-making-charges.jpg",
     featured: true,
   },
   {
@@ -37,52 +40,17 @@ export const articles: Article[] = [
     excerpt: "Step-by-step guide to verifying IGI and GIA certificates online. Check if your diamond's grading is legitimate and matches what the retailer claims.",
     category: "Certification",
     readTime: "6 min",
+    image: "/images/learn/diamond-certificate-verification.jpg",
     featured: true,
   },
   // ─── Additional articles (dynamic [slug] route) ───
-  {
-    slug: "lab-grown-diamonds",
-    title: "Lab-Grown Diamonds: The Complete 2026 Guide",
-    excerpt: "Everything you need to know about buying lab-grown diamonds in Australia — pricing trends, certification, and how to get the best value.",
-    category: "Lab-Grown Diamonds",
-    readTime: "12 min",
-    content: [
-      {
-        heading: "What Are Lab-Grown Diamonds?",
-        body: "Lab-grown diamonds are real diamonds — chemically, physically, and optically identical to mined stones. They are created using two methods: High Pressure High Temperature (HPHT) and Chemical Vapour Deposition (CVD). Both produce genuine carbon crystal structures that grade identically on the GIA and IGI scales.\n\nThe key difference is origin, not quality. A lab-grown diamond will pass every standard gemological test. The distinction matters for pricing and resale — not for brilliance, hardness, or beauty.",
-      },
-      {
-        heading: "How Lab-Grown Pricing Works in Australia",
-        body: "Lab-grown diamond prices have dropped significantly since 2021 — a 1ct round brilliant that retailed for $4,500 AUD in 2022 now typically sells between $1,200–$2,000 AUD in 2026. This collapse is driven by increasing production capacity, primarily from India and China.\n\nPrices are falling fastest in the 1–2ct round brilliant category. Fancy shapes (oval, cushion, emerald) have held slightly better due to lower production volumes. Expect continued downward pressure through 2026–2027.\n\nThe Lustrumo Diamond Price Tracker monitors these trends across Australian retailers in real time.",
-      },
-      {
-        heading: "Certification: IGI vs GIA",
-        body: "Most lab-grown diamonds sold in Australia are certified by IGI (International Gemological Institute). GIA also grades lab-grown stones but is less commonly used for them in the Australian market.\n\nBoth labs assess the same 4Cs — carat, colour, clarity, and cut. However, IGI grading can occasionally be one grade more generous than GIA on colour and clarity. When comparing prices, always ensure you're comparing within the same certifying body.\n\nAlways verify the certificate number directly with the lab before purchasing. Lustrumo's Certification Verifier cross-references cert numbers against retailer listings to flag misrepresentation.",
-      },
-      {
-        heading: "What to Look For When Buying",
-        body: "Focus on the 4Cs in this priority order for lab-grown diamonds:\n\n1. Cut — This has the biggest impact on brilliance. Insist on Excellent or Ideal cut grades.\n2. Carat — Lab-grown prices per carat drop significantly above 1.5ct, making larger stones better value.\n3. Colour — G or H colour is the sweet spot. D–F commands a premium but the difference is invisible to most people.\n4. Clarity — VS2 or better is eye-clean. Don't pay for VVS or IF unless you're a collector.\n\nAlso check: fluorescence (None or Faint is ideal), polish (Excellent), and symmetry (Excellent). These secondary factors affect light performance but are often overlooked by retailers.",
-      },
-      {
-        heading: "Fair Price Ranges (2026)",
-        body: "These are indicative fair value ranges for IGI-certified lab-grown diamonds in Australia as of early 2026. Prices include GST.\n\n• 0.50ct Round, G VS2, Excellent cut: $450–$700 AUD\n• 1.00ct Round, G VS2, Excellent cut: $1,200–$1,800 AUD\n• 1.50ct Round, G VS2, Excellent cut: $1,800–$2,800 AUD\n• 2.00ct Round, G VS2, Excellent cut: $2,500–$4,000 AUD\n• 1.00ct Oval, F VS1, Excellent cut: $1,000–$1,600 AUD\n\nPrices above these ranges warrant scrutiny. Use Lustrumo's Deal Checker to get a fair value estimate for any specific product.",
-      },
-      {
-        heading: "Resale Value",
-        body: "Lab-grown diamonds have minimal resale value — typically 10–20% of retail. This is an important factor if investment value matters to you. The rapid price decline means a stone purchased today will cost significantly less to replace in 12–24 months.\n\nIf resale matters, consider natural diamonds. If you're optimising for the best-looking stone at the lowest price, lab-grown is the clear winner.",
-      },
-      {
-        heading: "Common Retailer Tactics to Watch For",
-        body: "• Inflated compare-at prices — Some retailers show 'was $5,000, now $1,800' when the stone was never worth $5,000.\n• Mixing lab-grown side stones with natural centre stones (or vice versa) without clear disclosure.\n• Claiming IGI certification without providing a verifiable certificate number.\n• Bundling setting costs into the diamond price to make the stone appear more expensive than it is.\n\nLustrumo's unbundled valuation separates centre stone, setting, and side stone costs so you can see exactly what you're paying for.",
-      },
-    ],
-  },
   {
     slug: "gold-buying-guide",
     title: "Gold Buying Guide: Karat, Weight & Making Charges",
     excerpt: "Understand gold purity, making charges, and how to calculate the real value of any gold piece in Australia.",
     category: "Gold Buying",
     readTime: "8 min",
+    image: "/images/learn/gold-buying-guide.jpg",
     content: [
       {
         heading: "Understanding Gold Purity",
@@ -112,6 +80,7 @@ export const articles: Article[] = [
     excerpt: "A data-driven breakdown of carat, colour, clarity, and cut — what actually matters for value and appearance.",
     category: "Certification",
     readTime: "10 min",
+    image: "/images/learn/4cs-explained.jpg",
     content: [
       {
         heading: "The 4Cs Framework",
@@ -140,25 +109,12 @@ export const articles: Article[] = [
     ],
   },
   {
-    slug: "making-charges",
-    title: "22K Gold Making Charges Explained",
-    excerpt: "Understand gold making charges, how they're calculated, and what's a fair premium for different types of jewellery.",
-    category: "Gold Buying",
-    readTime: "8 min",
-  },
-  {
-    slug: "verify-diamond-certificate",
-    title: "How to Verify a Diamond Certificate",
-    excerpt: "Step-by-step guide to verifying IGI and GIA diamond certificates, spotting fakes, and understanding what each section means.",
-    category: "Certification",
-    readTime: "6 min",
-  },
-  {
     slug: "lab-grown-vs-natural",
     title: "Lab-Grown vs Natural: The Real Differences",
     excerpt: "A data-driven comparison of lab-grown and natural diamonds — price, quality, resale value, and what matters most.",
     category: "Lab-Grown Diamonds",
     readTime: "10 min",
+    image: "/images/learn/lab-grown-vs-natural.jpg",
   },
   {
     slug: "how-much-1-carat",
@@ -166,6 +122,7 @@ export const articles: Article[] = [
     excerpt: "Fair price ranges for 1 carat diamonds across all origins, shapes, and quality grades in the Australian market.",
     category: "Market Trends",
     readTime: "7 min",
+    image: "/images/learn/how-much-1-carat.jpg",
   },
 ]
 

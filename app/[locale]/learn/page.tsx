@@ -58,7 +58,9 @@ export default function LearnPage() {
               <Link key={article.slug} href={`${prefix}/learn/${article.slug}`}>
                 <Card className="group h-full cursor-pointer transition-shadow hover:shadow-md" style={{ borderColor: "rgba(13,148,136,0.2)", borderWidth: 2 }}>
                   <CardContent className="p-0">
-                    <div className="h-40 rounded-t-lg" style={{ background: "linear-gradient(135deg, #F0FDFA, #CCFBF1)" }} />
+                    <div className="h-40 overflow-hidden rounded-t-lg">
+                      <img src={article.image} alt={article.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    </div>
                     <div className="p-5">
                       <div className="flex items-center gap-2">
                         <Badge>{article.category}</Badge>
@@ -90,7 +92,9 @@ export default function LearnPage() {
               <Link key={article.slug} href={`${prefix}/learn/${article.slug}`}>
                 <Card className="group h-full cursor-pointer transition-shadow hover:shadow-md">
                   <CardContent className="p-0">
-                    <div className="h-40 rounded-t-lg" style={{ background: "linear-gradient(135deg, #F1F5F9, #E2E8F0)" }} />
+                    <div className="h-40 overflow-hidden rounded-t-lg">
+                      <img src={article.image} alt={article.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    </div>
                     <div className="p-5">
                       <div className="flex items-center gap-2">
                         <Badge>{article.category}</Badge>

@@ -171,5 +171,30 @@ export async function GET() {
 
   retailers.sort((a, b) => b.score - a.score)
 
-  return NextResponse.json({ retailers })
+  // Fetch directory retailers (manual entries, not scraped)
+  interface DirectoryRetailer {
+    name: string
+    website_url: string | null
+    city: string | null
+    state: string | null
+    has_physical_store: boolean
+    has_online_store: boolean
+    categories: string[]
+  }
+
+  let directory: DirectoryRetailer[] = []
+  const { data: dirData } = await supabase
+    .from("retailers_directory")
+    .select("name, website_url, city, state, has_physical_store, has_online_store, categories")
+    .eq("locale", "au")
+    .eq("is_scraped", false)
+    .order("name", { ascending: true })
+
+  if (dirData) {
+    // Exclude any that already appear in the verified list
+    const verifiedNames = new Set(retailers.map(r => r.name.toLowerCase()))
+    directory = dirData.filter(d => !verifiedNames.has(d.name.toLowerCase()))
+  }
+
+  return NextResponse.json({ retailers, directory })
 }
